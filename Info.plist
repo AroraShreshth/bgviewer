@@ -6,6 +6,8 @@
 	<string>Background Viewer</string>
 	<key>CFBundleExecutable</key>
 	<string>bgviewer</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.shreshth.bgviewer</string>
 	<key>CFBundleName</key>

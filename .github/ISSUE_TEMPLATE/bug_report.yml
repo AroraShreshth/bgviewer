@@ -1,0 +1,38 @@
+name: Bug report
+description: Something didn't stop, didn't show up, or broke
+labels: [bug]
+body:
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. 15.5 (Sequoia)
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of service was involved?
+      options:
+        - Auto-start agent (launch agent)
+        - Homebrew service
+        - Listening process
+        - The app itself (UI, crash, …)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you click, what did you expect, what actually happened? If the footer showed an error message, include it verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Service details (if relevant)
+      description: |
+        For agent issues, the plist helps enormously:
+        `cat ~/Library/LaunchAgents/<label>.plist`
+      render: shell

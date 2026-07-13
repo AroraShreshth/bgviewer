@@ -12,8 +12,7 @@ You kill a stray dev server, and two seconds later it's back. That's launchd doi
 
 bgviewer sits in your menu bar, finds all of it, shows you where each thing comes from, and stops it **at the source**.
 
-<!-- TODO: add screenshot -->
-<!-- ![bgviewer dropdown](docs/screenshot.png) -->
+<p align="center"><img src="docs/screenshot.png" width="470" alt="bgviewer dropdown — background services listed with stop, pause, restart and disable controls"></p>
 
 ## What it shows
 
@@ -59,6 +58,13 @@ More guardrails:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash
+```
+
+**Homebrew:**
+
+```sh
+brew tap arorashreshth/bgviewer https://github.com/AroraShreshth/bgviewer
+brew install --cask arorashreshth/bgviewer/bgviewer --no-quarantine
 ```
 
 **Manually:** download the zip from [Releases](https://github.com/AroraShreshth/bgviewer/releases), unzip, drag `bgviewer.app` to `/Applications`. The app isn't notarized yet, so macOS will block the first open — clear the flag with

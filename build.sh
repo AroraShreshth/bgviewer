@@ -9,6 +9,7 @@ echo "→ Building bgviewer…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
+cp assets/AppIcon.icns "$APP/Contents/Resources/"
 
 # Universal binary: build each slice, then lipo them together.
 SLICES=()

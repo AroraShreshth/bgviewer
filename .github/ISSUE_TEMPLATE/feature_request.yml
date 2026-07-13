@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest something bgviewer should see or control
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the background thing you can't manage today?
+      description: e.g. "root daemons", "UDP listeners", "docker containers", "login items"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should bgviewer do about it?
