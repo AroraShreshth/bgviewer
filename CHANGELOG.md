@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 — 2026-07-13
+
+- New app icon (designed artwork run through the squircle pipeline in
+  `assets/png_to_icns.swift`; source art committed as `assets/icon_art.png`)
+- Icon shown at the top of the README
+
 ## 1.0.1 — 2026-07-13
 
 - App icon (generated from the menu-bar gauge symbol; script in `assets/`)

@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" width="116" alt="bgviewer icon"></p>
+
 # bgviewer
 
 [![CI](https://github.com/AroraShreshth/bgviewer/actions/workflows/ci.yml/badge.svg)](https://github.com/AroraShreshth/bgviewer/actions/workflows/ci.yml)
