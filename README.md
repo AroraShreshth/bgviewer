@@ -55,6 +55,20 @@ More guardrails:
 
 ## Install
 
+**Quick install** (recommended — downloads the latest release, installs to `/Applications`, launches):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash
+```
+
+**Manually:** download the zip from [Releases](https://github.com/AroraShreshth/bgviewer/releases), unzip, drag `bgviewer.app` to `/Applications`. The app isn't notarized yet, so macOS will block the first open — clear the flag with
+
+```sh
+xattr -d com.apple.quarantine /Applications/bgviewer.app
+```
+
+or approve it under **System Settings → Privacy & Security → "Open Anyway"** (on macOS 13–14, right-click → Open also works).
+
 **From source** (macOS 13+, Xcode command-line tools):
 
 ```sh
@@ -63,11 +77,7 @@ git clone https://github.com/AroraShreshth/bgviewer && cd bgviewer
 open bgviewer.app        # the gauge icon appears in your menu bar
 ```
 
-**From a release:** pre-built zips land on the [Releases](https://github.com/AroraShreshth/bgviewer/releases) page (first tagged release coming soon). Unzip, drag to `/Applications`, then **right-click → Open** the first time — the app isn't notarized yet, so macOS wants one explicit approval. Or:
-
-```sh
-xattr -d com.apple.quarantine /Applications/bgviewer.app
-```
+Release builds are universal (Apple Silicon + Intel) and need macOS 13 Ventura or newer.
 
 **Start at login:** System Settings → General → Login Items → add bgviewer. (Yes, an app for killing auto-started things can itself auto-start. We appreciate the irony.)
 
@@ -111,7 +121,7 @@ The integration tests are the interesting part: they spin up a real `KeepAlive` 
 - User launch agents only — root daemons would need elevated rights (planned, behind an explicit prompt).
 - Listening-process discovery is TCP-only.
 - Restarting a loose process re-runs its command line via the shell in its original cwd — great for dev servers, not guaranteed for anything exotic.
-- Not signed/notarized yet — hence the one-time right-click → Open.
+- Not notarized yet — hence the one-time quarantine/"Open Anyway" step (Developer ID signing is planned).
 
 ## License
 
