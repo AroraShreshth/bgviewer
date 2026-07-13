@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: swiftc --version
+
+      - name: Build app
+        run: ./build.sh
+
+      # Integration tests need a real GUI launchd session, which headless
+      # runners don't have — run those locally via ./test.sh (no flag).
+      - name: Unit tests
+        run: ./test.sh --unit

@@ -1,0 +1,40 @@
+name: Release
+
+# Tag a commit `vX.Y.Z` and push it — this builds the app, zips it, and
+# attaches it to a GitHub release with checksums and generated notes.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stamp version from tag
+        run: /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${GITHUB_REF_NAME#v}" Info.plist
+
+      - name: Unit tests
+        run: ./test.sh --unit
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent bgviewer.app "dist/bgviewer-${GITHUB_REF_NAME#v}.zip"
+          (cd dist && shasum -a 256 *.zip > checksums.txt && cat checksums.txt)
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/checksums.txt
+          generate_release_notes: true

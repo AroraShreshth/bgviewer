@@ -1,0 +1,12 @@
+# Build products
+bgviewer.app/
+dist/
+*.o
+.build/
+
+# macOS
+.DS_Store
+
+# Editors
+xcuserdata/
+.idea/
