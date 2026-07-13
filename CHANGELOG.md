@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 — 2026-07-13
+
+- App icon (generated from the menu-bar gauge symbol; script in `assets/`)
+- Universal binary and one-line installer, introduced just after 1.0.0, are
+  now part of a tagged build
+
 ## 1.0.0 — 2026-07-13
 
 Initial release.
