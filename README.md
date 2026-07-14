@@ -98,8 +98,8 @@ Release builds are universal (Apple Silicon + Intel) and need macOS 13 Ventura o
 
 Two GitHub Actions workflows keep this honest:
 
-- **[CI](.github/workflows/ci.yml)** — every push and PR builds the app from scratch and runs the unit-test suite on a macOS runner. The badge up top is live.
-- **[Release](.github/workflows/release.yml)** — pushing a tag like `v1.0.0` automatically builds, zips, checksums, and attaches the app to a GitHub Release with generated notes. No manual packaging, ever.
+- **[CI](.github/workflows/ci.yml)** — every push and PR builds the app from scratch, runs the unit-test suite, and then runs the **install smoke test** on a macOS runner: the freshly built app is zipped, installed, and launched, and must stay alive — so "it builds" always also means "it runs".
+- **[Release](.github/workflows/release.yml)** — pushing a tag like `v1.0.0` automatically builds, smoke-tests, zips, checksums, and attaches the app to a GitHub Release with generated notes. A release cannot ship unless the app demonstrably launches.
 
 ## Development
 
@@ -115,7 +115,8 @@ Sources/
 Tests/main.swift        117-check test suite
 build.sh                builds bgviewer.app with plain swiftc — no Xcode project
 test.sh                 compiles and runs the tests
-release.sh              stamps a version, builds, zips into dist/
+smoke-test.sh           full install loop: package → install → launch → stays up
+release.sh              stamps a version, builds, smoke-tests, zips into dist/
 ```
 
 No dependencies. No Xcode project. The whole build is one `swiftc` invocation.

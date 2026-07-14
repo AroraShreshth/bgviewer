@@ -25,6 +25,10 @@ jobs:
       - name: Build
         run: ./build.sh
 
+      # No release ships unless the built app installs and launches.
+      - name: Install smoke test
+        run: ./smoke-test.sh
+
       - name: Package
         run: |
           mkdir -p dist

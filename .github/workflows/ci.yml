@@ -21,3 +21,8 @@ jobs:
       # runners don't have — run those locally via ./test.sh (no flag).
       - name: Unit tests
         run: ./test.sh --unit
+
+      # Full user loop: package like a release, install like install.sh,
+      # launch the app on the runner and prove it stays up.
+      - name: Install smoke test
+        run: ./smoke-test.sh

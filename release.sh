@@ -11,6 +11,7 @@ echo "→ Version stamped: $VERSION"
 
 ./test.sh
 ./build.sh
+./smoke-test.sh
 
 mkdir -p dist
 ZIP="dist/bgviewer-$VERSION.zip"
