@@ -67,6 +67,7 @@ struct RootView: View {
                 Spacer()
                 if store.isLoading { ProgressView().controlSize(.small).scaleEffect(0.8) }
                 IconButton(system: "arrow.clockwise", color: .blue, help: "Rescan") { store.refresh() }
+                IconButton(system: "power", color: .red, help: "Quit bgviewer") { NSApp.terminate(nil) }
             }
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
@@ -178,8 +179,6 @@ struct RootView: View {
                 Text(footerInfo)
                     .font(.system(size: 10)).foregroundStyle(.tertiary)
             }
-            Button("Quit") { NSApp.terminate(nil) }
-                .controlSize(.small)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

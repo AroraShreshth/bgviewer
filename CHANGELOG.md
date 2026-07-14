@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-07-14
+
+- Quit is now a power button in the header (top right); footer decluttered
+
 ## 1.2.0 — 2026-07-14
 
 - In-app help: an ⓘ button in the header explains every section and button,
