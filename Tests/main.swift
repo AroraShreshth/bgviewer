@@ -233,6 +233,74 @@ func testMachineAgents() {
     check("user agent unaffected by machine logic", c.first?.state == .unloaded && c.first?.domain == "user")
 }
 
+// ───────────────────────── Unit: v1.3 additions ─────────────────────────
+
+func testCron() {
+    print("\n• Unit — crontab parsing")
+    let tab = """
+    # nightly maintenance
+    MAILTO=""
+    0 0 * * * cd /Users/x/Developer/agents && git pull
+    30 9 * * * /usr/local/bin/backup.sh --fast
+    15 * * * * echo tick
+    @reboot /Users/x/startup.sh
+    @daily /Users/x/daily.sh
+    not a cron line
+    """
+    let jobs = ServiceScanner.parseCrontab(tab)
+    check("cron: comments/env/garbage skipped, 5 entries", jobs.count == 5)
+    check("cron: daily schedule humanized", jobs[0].name == "daily at 0:00")
+    check("cron: 9:30 humanized", jobs[1].name == "daily at 9:30")
+    check("cron: hourly humanized", jobs[2].name == "hourly at :15")
+    check("cron: @reboot humanized", jobs[3].name == "at boot")
+    check("cron: @daily humanized", jobs[4].name == "daily at 0:00")
+    check("cron: command preserved", jobs[1].command == "/usr/local/bin/backup.sh --fast")
+    check("cron: read-only — no buttons at all", jobs.allSatisfy { !$0.showStop && !$0.showStart && !$0.canPause && !$0.canRestart && !$0.canDisable && !$0.canTrash })
+    check("cron: empty crontab -> empty", ServiceScanner.parseCrontab("").isEmpty)
+}
+
+func testVersionCompare() {
+    print("\n• Unit — version comparison")
+    check("1.3.0 newer than 1.2.1", isNewerVersion("1.3.0", than: "1.2.1"))
+    check("v-prefix handled", isNewerVersion("v1.10.0", than: "1.9.9"))
+    check("numeric not lexicographic", isNewerVersion("1.10.0", than: "1.9.0"))
+    check("equal is not newer", !isNewerVersion("1.2.1", than: "1.2.1"))
+    check("older is not newer", !isNewerVersion("1.2.0", than: "1.2.1"))
+    check("longer equal prefix", isNewerVersion("1.2.1.1", than: "1.2.1"))
+}
+
+func testListenerDiff() {
+    print("\n• Unit — new-listener diff (alerts)")
+    func listener(_ pid: Int, _ name: String, _ ports: [Int], type: String = "dev") -> BackgroundService {
+        BackgroundService(id: "proc:\(pid)", name: name, subtitle: "", kind: .process,
+                          state: .running, pid: pid, command: name, ports: ports, procType: type)
+    }
+    let first = [listener(1, "demo.py", [8091]), listener(2, "Spotify", [7768], type: "app")]
+    let r1 = ServiceScanner.newDevListeners(previous: [], current: first)
+    check("baseline records dev listeners only", r1.keys == ["8091|demo.py"])
+    check("first sighting reported as fresh", r1.fresh.map { $0.pid } == [1])
+    check("app listeners never alert", !r1.fresh.contains { $0.name == "Spotify" })
+
+    let second = [listener(9, "demo.py", [8091]), listener(3, "next-server", [3000])]
+    let r2 = ServiceScanner.newDevListeners(previous: r1.keys, current: second)
+    check("same server+port after restart: no re-alert", !r2.fresh.contains { $0.name == "demo.py" })
+    check("genuinely new server alerts", r2.fresh.map { $0.name } == ["next-server"])
+    check("keys roll forward", r2.keys == ["8091|demo.py", "3000|next-server"])
+}
+
+func testTrashEligibility() {
+    print("\n• Unit — trash eligibility")
+    let parked = svc(kind: .launchAgent, state: .disabled, label: "a",
+                     plist: "/Users/x/Library/LaunchAgents/Disabled by bgviewer/a.plist")
+    check("parked agent can be trashed", parked.canTrash)
+    let unparked = svc(kind: .launchAgent, state: .disabled, label: "a",
+                       plist: "/Library/LaunchAgents/a.plist")
+    check("non-parked disabled agent cannot", !unparked.canTrash)
+    let active = svc(kind: .launchAgent, state: .running, pid: 1, label: "a",
+                     plist: "/Users/x/Library/LaunchAgents/Disabled by bgviewer/a.plist")
+    check("running agent cannot be trashed", !active.canTrash)
+}
+
 // ─────────────── Integration: STOP really stops ───────────────
 
 func testProcessStop() {
@@ -366,6 +434,34 @@ func testDisabledOnlyEnable() {
     check("cleanup: nothing left behind", !fm.fileExists(atPath: plistPath) && !ServiceScanner.parseLaunchctlList().loaded.contains(label))
 }
 
+// ─────────────── Integration: trash a parked agent ───────────────
+
+func testTrashParkedAgent() {
+    print("\n• Integration — trash a parked agent")
+    let label = "com.bgviewer.selftest3"
+    let fm = FileManager.default
+    try? fm.createDirectory(at: ServiceScanner.parkedDir, withIntermediateDirectories: true)
+    let parkedPath = ServiceScanner.parkedDir.appendingPathComponent("\(label).plist").path
+    let xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict><key>Label</key><string>\(label)</string><key>Program</key><string>/bin/sleep</string></dict></plist>"
+    try? xml.write(toFile: parkedPath, atomically: true, encoding: .utf8)
+    check("setup: parked plist exists", fm.fileExists(atPath: parkedPath))
+
+    let s = svc(kind: .launchAgent, state: .disabled, label: label, plist: parkedPath)
+    let err = ServiceControl.perform(.trash, on: s)
+    check("trash: no error", err == nil)
+    check("trash: gone from parked dir", !fm.fileExists(atPath: parkedPath))
+
+    // Clean the copy out of the user's Trash so nothing lingers.
+    let trashed = fm.homeDirectoryForCurrentUser.appendingPathComponent(".Trash/\(label).plist")
+    let inTrash = fm.fileExists(atPath: trashed.path)
+    check("trash: recoverable — found in ~/.Trash", inTrash)
+    if inTrash { try? fm.removeItem(at: trashed) }
+
+    // A non-parked path must be refused.
+    let refuse = ServiceControl.perform(.trash, on: svc(kind: .launchAgent, state: .disabled, label: label, plist: "/Library/LaunchAgents/\(label).plist"))
+    check("trash: refuses non-parked plists", refuse != nil)
+}
+
 // ───────────────────────────── run ─────────────────────────────
 
 print("Running bgviewer tests\(unitOnly ? " (unit only)" : "")")
@@ -377,6 +473,10 @@ testDisabledParsing()
 testEtimeAndShorten()
 testHogs()
 testMachineAgents()
+testCron()
+testVersionCompare()
+testListenerDiff()
+testTrashEligibility()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
 } else {
@@ -384,6 +484,7 @@ if unitOnly {
     testPauseResume()
     testAgentLifecycle()
     testDisabledOnlyEnable()
+    testTrashParkedAgent()
 }
 
 print("\n────────────────────────────")

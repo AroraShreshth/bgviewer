@@ -93,6 +93,14 @@ enum ServiceScanner {
                 services: hogs))
         }
 
+        let cron = discoverCron()
+        if !cron.isEmpty {
+            groups.append(ServiceGroup(
+                id: "cron", title: "Scheduled (cron)",
+                subtitle: "Read-only — entries from `crontab -l`",
+                services: cron))
+        }
+
         if !parked.isEmpty {
             groups.append(ServiceGroup(
                 id: "disabled", title: "Disabled (parked)",
@@ -401,6 +409,85 @@ enum ServiceScanner {
             if out.count == limit { break }
         }
         return out
+    }
+
+    // MARK: Cron (read-only)
+
+    static func discoverCron() -> [BackgroundService] {
+        parseCrontab(Shell.run("/usr/bin/crontab", ["-l"]).out)
+    }
+
+    /// Pure parser for `crontab -l` output. Read-only by design — bgviewer
+    /// displays cron entries but never edits the crontab.
+    static func parseCrontab(_ output: String) -> [BackgroundService] {
+        var out: [BackgroundService] = []
+        for (i, raw) in output.split(separator: "\n").enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+            // environment assignments like MAILTO=""
+            if line.range(of: #"^[A-Za-z_][A-Za-z0-9_]*="#, options: .regularExpression) != nil { continue }
+
+            var schedule: String
+            var command: String
+            if line.hasPrefix("@") {
+                let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+                guard parts.count == 2 else { continue }
+                schedule = String(parts[0])
+                command = String(parts[1])
+            } else {
+                let parts = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
+                guard parts.count == 6 else { continue }
+                schedule = parts[0..<5].joined(separator: " ")
+                command = String(parts[5])
+            }
+            out.append(BackgroundService(
+                id: "cron:\(i)", name: prettyCron(schedule),
+                subtitle: middleShorten(command, 52),
+                kind: .cron, state: .loaded, command: command))
+        }
+        return out
+    }
+
+    /// Humanize the common cron shapes; fall back to the raw field string.
+    static func prettyCron(_ schedule: String) -> String {
+        switch schedule {
+        case "@reboot":  return "at boot"
+        case "@daily", "@midnight": return "daily at 0:00"
+        case "@hourly":  return "hourly"
+        case "@weekly":  return "weekly"
+        case "@monthly": return "monthly"
+        default: break
+        }
+        let f = schedule.split(separator: " ").map(String.init)
+        guard f.count == 5 else { return schedule }
+        if let m = Int(f[0]), let h = Int(f[1]), f[2] == "*", f[3] == "*", f[4] == "*" {
+            return String(format: "daily at %d:%02d", h, m)
+        }
+        if let m = Int(f[0]), f[1] == "*", f[2] == "*", f[3] == "*", f[4] == "*" {
+            return String(format: "hourly at :%02d", m)
+        }
+        return schedule
+    }
+
+    // MARK: Listener watch (notifications)
+
+    /// Diff helper for the background watcher: which dev-server listeners are
+    /// new since the previous tick? Keyed by port+name so a restart of the
+    /// same server doesn't re-alert.
+    static func newDevListeners(previous: Set<String>,
+                                current: [BackgroundService]) -> (keys: Set<String>, fresh: [BackgroundService]) {
+        var keys = Set<String>()
+        var fresh: [BackgroundService] = []
+        for s in current where s.kind == .process && s.procType == "dev" {
+            var isNew = false
+            for p in s.ports {
+                let k = "\(p)|\(s.name)"
+                keys.insert(k)
+                if !previous.contains(k) { isNew = true }
+            }
+            if isNew { fresh.append(s) }
+        }
+        return (keys, fresh)
     }
 
     /// "02-23:00:54" -> "2d 23h", "23:13:12" -> "23h 13m", "17:55" -> "17m"

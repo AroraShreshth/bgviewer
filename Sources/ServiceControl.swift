@@ -15,6 +15,18 @@ enum ServiceControl {
         case .restart:     return restart(s)
         case .disable:     return disableAgent(s)
         case .enable:      return enableAgent(s)
+        case .trash:       return trashAgent(s)
+        }
+    }
+
+    /// Move a parked plist to the Trash — recoverable, but gone from the list.
+    private static func trashAgent(_ s: BackgroundService) -> String? {
+        guard s.canTrash, let plist = s.plistPath else { return "Only parked agents can be trashed" }
+        do {
+            try FileManager.default.trashItem(at: URL(fileURLWithPath: plist), resultingItemURL: nil)
+            return nil
+        } catch {
+            return "Couldn't trash: \(error.localizedDescription)"
         }
     }
 
@@ -56,6 +68,8 @@ enum ServiceControl {
             return r.ok ? nil : "brew start failed: \(short(r.err))"
         case .process:
             return "Can't start a stopped process"
+        case .cron:
+            return "Cron entries are read-only"
         }
     }
 
@@ -77,6 +91,8 @@ enum ServiceControl {
         case .process:
             guard let pid = s.pid else { return "No pid" }
             return stopProcess(pid)
+        case .cron:
+            return "Cron entries are read-only"
         }
     }
 
@@ -111,6 +127,8 @@ enum ServiceControl {
             let safeDir = dir.replacingOccurrences(of: "'", with: "'\\''")
             Shell.sh("cd '\(safeDir)' && nohup \(cmd) >/dev/null 2>&1 &")
             return nil
+        case .cron:
+            return "Cron entries are read-only"
         }
     }
 

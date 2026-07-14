@@ -66,6 +66,13 @@ struct RootView: View {
                 }
                 Spacer()
                 if store.isLoading { ProgressView().controlSize(.small).scaleEffect(0.8) }
+                if let v = store.updateAvailable {
+                    IconButton(system: "arrow.down.circle.fill", color: .green, help: "bgviewer \(v) is available — open Releases") {
+                        if let url = URL(string: "https://github.com/AroraShreshth/bgviewer/releases/latest") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
                 IconButton(system: "arrow.clockwise", color: .blue, help: "Rescan") { store.refresh() }
                 IconButton(system: "power", color: .red, help: "Quit bgviewer") { NSApp.terminate(nil) }
             }
@@ -152,11 +159,15 @@ struct RootView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Toggle("Show all", isOn: $showInactive)
+            Toggle("All", isOn: $showInactive)
                 .toggleStyle(.switch).controlSize(.mini)
                 .font(.system(size: 11))
                 .help("Include stopped and idle services")
-            Toggle("At login", isOn: $loginEnabled)
+            Toggle("Alerts", isOn: Binding(get: { store.alertsEnabled }, set: { store.setAlerts($0) }))
+                .toggleStyle(.switch).controlSize(.mini)
+                .font(.system(size: 11))
+                .help("Notify when a new dev server starts listening")
+            Toggle("Login", isOn: $loginEnabled)
                 .toggleStyle(.switch).controlSize(.mini)
                 .font(.system(size: 11))
                 .help("Start bgviewer automatically when you log in")
@@ -186,7 +197,9 @@ struct RootView: View {
 
     private func visible(_ g: ServiceGroup) -> [BackgroundService] {
         g.services.filter { s in
-            let stateOK = showInactive || s.state == .running || s.state == .paused || s.state == .disabled
+            // Cron entries are active schedules — always show them.
+            let stateOK = showInactive || s.kind == .cron
+                || s.state == .running || s.state == .paused || s.state == .disabled
             guard stateOK else { return false }
             guard !search.isEmpty else { return true }
             let q = search.lowercased()
@@ -221,8 +234,10 @@ struct InfoPanel: View {
                         text: "Anything holding a TCP port right now — forgotten dev servers live here.")
                 InfoRow(icon: "flame", color: .orange, title: "Resource Hogs",
                         text: "No port, but quietly burning ≥15% CPU or ≥1 GB RAM in the background.")
+                InfoRow(icon: "calendar.badge.clock", color: .indigo, title: "Scheduled (cron)",
+                        text: "Your crontab entries, read-only — bgviewer shows them but never edits cron.")
                 InfoRow(icon: "nosign", color: .purple, title: "Disabled (parked)",
-                        text: "Blocked from auto-starting. Nothing is ever deleted — plists are parked in \"Disabled by bgviewer\" and restored on re-enable.")
+                        text: "Blocked from auto-starting. Plists are parked in \"Disabled by bgviewer\" and restored on re-enable — or 🗑 them to the Trash when you're sure.")
 
                 sectionTitle("Buttons")
                 InfoRow(icon: "stop.fill", color: .red, title: "Stop",
@@ -241,6 +256,8 @@ struct InfoPanel: View {
                         text: "Full command, Copy, Reveal plist, View log — and one-click localhost links for dev servers.")
                 InfoRow(icon: "clock.arrow.circlepath", color: .secondaryInfo, title: "Always current",
                         text: "The list re-scans every few seconds while open.")
+                InfoRow(icon: "bell.badge", color: .secondaryInfo, title: "Alerts",
+                        text: "Flip \"Alerts\" in the footer to get a notification whenever a new dev server starts listening — even while this window is closed.")
 
                 HStack(spacing: 8) {
                     Chip(label: "GitHub — docs & issues", system: "arrow.up.right.square") {
@@ -249,7 +266,7 @@ struct InfoPanel: View {
                         }
                     }
                     Spacer()
-                    Text("Free · MIT · no telemetry")
+                    Text("Free · MIT · no telemetry — only a daily release check")
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                 }
                 .padding(.top, 2)
@@ -422,6 +439,9 @@ struct ServiceRow: View {
             if s.canEnable {
                 IconButton(system: "arrow.uturn.left", color: .green, help: "Re-enable auto-start") { store.perform(.enable, on: s) }
             }
+            if s.canTrash {
+                IconButton(system: "trash", color: .red, help: "Move to Trash — remove for good (recoverable from Trash)") { store.perform(.trash, on: s) }
+            }
         }
     }
 
@@ -430,6 +450,7 @@ struct ServiceRow: View {
         case .process:     return "Stop (quit process)"
         case .brewService: return "Stop service"
         case .launchAgent: return "Stop (unload now)"
+        case .cron:        return ""
         }
     }
 

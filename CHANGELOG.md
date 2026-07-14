@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.0 — 2026-07-14
+
+The awareness release.
+
+- **Alerts**: opt-in notification the moment a new dev server starts listening —
+  even while the dropdown is closed (1-minute background watch, dev servers
+  only, baseline on enable so it never floods)
+- **Scheduled (cron)**: read-only section showing `crontab -l` entries with
+  humanized schedules ("daily at 0:00")
+- **🗑 Trash for parked agents**: completes stop → pause → disable → *delete*;
+  moves the plist to the Trash (recoverable), refuses anything not parked
+- **Update check**: at most one GitHub API call every 6 hours; a green
+  download button appears in the header when a newer release exists — this is
+  the app's only network access
+- Footer toggles tightened (All · Alerts · Login)
+- Test suite grown to 117 checks
+
 ## 1.2.1 — 2026-07-14
 
 - Quit is now a power button in the header (top right); footer decluttered

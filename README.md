@@ -25,7 +25,8 @@ bgviewer sits in your menu bar, finds all of it, shows you where each thing come
 | **Homebrew Services** | `brew services` | postgres, redis, kafka, nginx |
 | **Listening Processes** | anything holding a TCP port (`lsof`) | forgotten `python -m http.server`, dev servers |
 | **Resource Hogs** | background processes burning CPU or RAM | that helper app quietly eating 25% CPU for days |
-| **Disabled (parked)** | agents you disabled via bgviewer | one click to bring them back |
+| **Scheduled (cron)** | `crontab -l` (read-only) | nightly scripts you set up and forgot |
+| **Disabled (parked)** | agents you disabled via bgviewer | one click to bring them back — or 🗑 to Trash |
 
 Agents that can resurrect themselves are marked **↻ auto-restart**, so you know *why* something keeps coming back. Apple system processes get a 🔒 and no destructive buttons — you can't accidentally break your Mac.
 
@@ -41,7 +42,7 @@ Agents that can resurrect themselves are marked **↻ auto-restart**, so you kno
 
 Every action is verified after it runs; if something fails, the reason shows up in the footer. Nothing fails silently.
 
-Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command), the list **auto-refreshes every few seconds while open**, and a footer toggle starts bgviewer **at login**. All of this is also explained in-app — the **ⓘ** button top-left.
+Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command), the list **auto-refreshes every few seconds while open**, and footer toggles for **start at login** and **Alerts** — a notification the moment a new dev server starts listening, even while the dropdown is closed. A subtle **update button** appears in the header when a newer release exists (a daily GitHub check is the app's only network call). All of this is also explained in-app — the **ⓘ** button top-left.
 
 ## How Disable works (and why it's safe)
 
@@ -111,7 +112,7 @@ Sources/
   ServiceStore.swift    observable state for the UI
   Views.swift           SwiftUI dropdown
   Shell.swift           subprocess runner (concurrent pipes + timeout watchdog)
-Tests/main.swift        88-check test suite
+Tests/main.swift        117-check test suite
 build.sh                builds bgviewer.app with plain swiftc — no Xcode project
 test.sh                 compiles and runs the tests
 release.sh              stamps a version, builds, zips into dist/

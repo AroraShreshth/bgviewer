@@ -4,6 +4,7 @@ enum ServiceKind: String, Sendable {
     case launchAgent   // ~/Library/LaunchAgents/*.plist  (can auto-restart)
     case brewService   // managed by `brew services`
     case process       // a loose process holding a listening TCP port
+    case cron          // a crontab entry — read-only
 }
 
 enum RunState: String, Sendable {
@@ -20,6 +21,7 @@ enum ControlAction: Sendable {
     case restart
     case disable
     case enable
+    case trash      // parked agents only: move the plist to the Trash
 }
 
 struct BackgroundService: Identifiable, Sendable {
@@ -56,12 +58,13 @@ extension BackgroundService {
         switch kind {
         case .process:                 return isActive
         case .launchAgent, .brewService: return isActive || state == .loaded
+        case .cron:                    return false
         }
     }
 
     var showStart: Bool {
         switch kind {
-        case .process:                 return false
+        case .process, .cron:          return false
         case .launchAgent, .brewService: return state == .unloaded
         }
     }
@@ -75,14 +78,36 @@ extension BackgroundService {
         case .launchAgent: return isActive || state == .loaded
         case .brewService: return isActive
         case .process:     return procType == "dev" && isActive
+        case .cron:        return false
         }
     }
 
     var canDisable: Bool { kind == .launchAgent && state != .disabled }
     var canEnable: Bool  { kind == .launchAgent && state == .disabled }
 
+    /// Parked agents only — the plist is ours to remove, and Trash is recoverable.
+    var canTrash: Bool {
+        kind == .launchAgent && state == .disabled
+            && (plistPath?.contains("Disabled by bgviewer") ?? false)
+    }
+
     /// Ask before killing something that isn't obviously a throwaway dev server.
     var needsConfirm: Bool {
         kind == .process && (procType == "app" || procType == "other")
     }
+}
+
+/// Numeric semver comparison: is `a` strictly newer than `b`?
+func isNewerVersion(_ a: String, than b: String) -> Bool {
+    func parts(_ s: String) -> [Int] {
+        s.trimmingCharacters(in: CharacterSet(charactersIn: "vV "))
+            .split(separator: ".").map { Int($0) ?? 0 }
+    }
+    let x = parts(a), y = parts(b)
+    for i in 0..<max(x.count, y.count) {
+        let xi = i < x.count ? x[i] : 0
+        let yi = i < y.count ? y[i] : 0
+        if xi != yi { return xi > yi }
+    }
+    return false
 }
