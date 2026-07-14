@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 func dotColor(_ s: RunState) -> Color {
     switch s {
@@ -15,7 +16,13 @@ func dotColor(_ s: RunState) -> Color {
 
 struct RootView: View {
     @EnvironmentObject var store: ServiceStore
-    @State private var showInactive = true
+    @AppStorage("showInactive") private var showInactive = false
+    @State private var search = ""
+    @State private var expandedId: String?
+    @State private var isOpen = false
+    @State private var loginEnabled = SMAppService.mainApp.status == .enabled
+
+    private let ticker = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,21 +33,48 @@ struct RootView: View {
             footer
         }
         .frame(width: 404)
-        .onAppear { store.refresh() }
+        .onAppear {
+            isOpen = true
+            loginEnabled = SMAppService.mainApp.status == .enabled
+            store.refresh()
+        }
+        .onDisappear { isOpen = false }
+        .onReceive(ticker) { _ in
+            if isOpen { store.refresh(auto: true) }
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "gauge.with.dots.needle.bottom.50percent")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Background Services").font(.system(size: 13, weight: .semibold))
-                Text("\(store.runningCount) running").font(.system(size: 11)).foregroundStyle(.secondary)
+        VStack(spacing: 8) {
+            HStack(spacing: 9) {
+                Image(systemName: "gauge.with.dots.needle.bottom.50percent")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Background Services").font(.system(size: 13, weight: .semibold))
+                    Text("\(store.runningCount) running").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if store.isLoading { ProgressView().controlSize(.small).scaleEffect(0.8) }
+                IconButton(system: "arrow.clockwise", color: .blue, help: "Rescan") { store.refresh() }
             }
-            Spacer()
-            if store.isLoading { ProgressView().controlSize(.small).scaleEffect(0.8) }
-            IconButton(system: "arrow.clockwise", color: .blue, help: "Rescan") { store.refresh() }
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                TextField("Filter by name, port, command…", text: $search)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                if !search.isEmpty {
+                    Button { search = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.12)))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -55,7 +89,7 @@ struct RootView: View {
                     ForEach(displayGroups) { group in
                         GroupHeader(title: group.title, subtitle: group.subtitle, count: group.services.count)
                         ForEach(group.services) { s in
-                            ServiceRow(s: s)
+                            ServiceRow(s: s, expandedId: $expandedId)
                             Divider().padding(.leading, 30)
                         }
                     }
@@ -81,15 +115,16 @@ struct RootView: View {
         if displayGroups.isEmpty { return 150 }
         let groupCount = displayGroups.count
         let rowCount = displayGroups.reduce(0) { $0 + $1.services.count }
-        let h = CGFloat(groupCount) * 30 + CGFloat(rowCount) * 43 + 14
-        return min(max(h, 160), 480)
+        let expandedExtra: CGFloat = displayGroups.contains { g in g.services.contains { $0.id == expandedId } } ? 96 : 0
+        let h = CGFloat(groupCount) * 30 + CGFloat(rowCount) * 43 + expandedExtra + 14
+        return min(max(h, 160), 500)
     }
 
     private var emptyState: some View {
         VStack(spacing: 6) {
             Image(systemName: store.isLoading ? "hourglass" : "checkmark.circle")
                 .font(.system(size: 26)).foregroundStyle(.secondary)
-            Text(store.isLoading ? "Scanning…" : "Nothing to show")
+            Text(store.isLoading ? "Scanning…" : (search.isEmpty ? "Nothing to show" : "No matches for “\(search)”"))
                 .font(.system(size: 12)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -97,10 +132,24 @@ struct RootView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
-            Toggle("Show inactive", isOn: $showInactive)
+        HStack(spacing: 10) {
+            Toggle("Show all", isOn: $showInactive)
                 .toggleStyle(.switch).controlSize(.mini)
                 .font(.system(size: 11))
+                .help("Include stopped and idle services")
+            Toggle("At login", isOn: $loginEnabled)
+                .toggleStyle(.switch).controlSize(.mini)
+                .font(.system(size: 11))
+                .help("Start bgviewer automatically when you log in")
+                .onChange(of: loginEnabled) { on in
+                    do {
+                        if on { try SMAppService.mainApp.register() }
+                        else { try SMAppService.mainApp.unregister() }
+                    } catch {
+                        store.statusMessage = "Login item: \(error.localizedDescription)"
+                        loginEnabled = SMAppService.mainApp.status == .enabled
+                    }
+                }
             Spacer()
             if let msg = store.statusMessage {
                 Label(msg, systemImage: "exclamationmark.triangle.fill")
@@ -119,8 +168,14 @@ struct RootView: View {
     }
 
     private func visible(_ g: ServiceGroup) -> [BackgroundService] {
-        g.services.filter {
-            showInactive || $0.state == .running || $0.state == .paused || $0.state == .disabled
+        g.services.filter { s in
+            let stateOK = showInactive || s.state == .running || s.state == .paused || s.state == .disabled
+            guard stateOK else { return false }
+            guard !search.isEmpty else { return true }
+            let q = search.lowercased()
+            return s.name.lowercased().contains(q)
+                || s.subtitle.lowercased().contains(q)
+                || (s.command?.lowercased().contains(q) ?? false)
         }
     }
 
@@ -161,21 +216,75 @@ struct GroupHeader: View {
 struct ServiceRow: View {
     @EnvironmentObject var store: ServiceStore
     let s: BackgroundService
+    @Binding var expandedId: String?
+
+    private var expanded: Bool { expandedId == s.id }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle().fill(dotColor(s.state)).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(s.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Text(s.subtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Circle().fill(dotColor(s.state)).frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(s.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                    Text(s.subtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                HStack(spacing: 1) { buttons }
             }
-            Spacer(minLength: 6)
-            HStack(spacing: 1) { buttons }
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    expandedId = expanded ? nil : s.id
+                }
+            }
+            if expanded { detail }
         }
-        .padding(.vertical, 6)
         .padding(.horizontal, 12)
-        .contentShape(Rectangle())
         .help(s.command ?? s.name)
+    }
+
+    private var detail: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let cmd = s.command, !cmd.isEmpty {
+                Text(cmd)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 6) {
+                if let cmd = s.command, !cmd.isEmpty {
+                    Chip(label: "Copy command", system: "doc.on.doc") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(cmd, forType: .string)
+                    }
+                }
+                if let plist = s.plistPath {
+                    Chip(label: "Reveal plist", system: "folder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: plist)])
+                    }
+                }
+                if let log = s.logPath, FileManager.default.fileExists(atPath: log) {
+                    Chip(label: "View log", system: "doc.text") {
+                        NSWorkspace.shared.open(URL(fileURLWithPath: log))
+                    }
+                }
+                if s.procType == "dev" {
+                    ForEach(s.ports.prefix(2), id: \.self) { port in
+                        Chip(label: ":\(port)", system: "safari") {
+                            if let url = URL(string: "http://localhost:\(port)") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                }
+                Spacer()
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder private var buttons: some View {
@@ -202,7 +311,7 @@ struct ServiceRow: View {
                 IconButton(system: "arrow.clockwise", color: .blue, help: "Restart") { store.perform(.restart, on: s) }
             }
             if s.canDisable {
-                IconButton(system: "nosign", color: .purple, help: "Disable — stop and block auto-restart") { store.perform(.disable, on: s) }
+                IconButton(system: "nosign", color: .purple, help: disableHelp) { store.perform(.disable, on: s) }
             }
             if s.canEnable {
                 IconButton(system: "arrow.uturn.left", color: .green, help: "Re-enable auto-start") { store.perform(.enable, on: s) }
@@ -217,9 +326,34 @@ struct ServiceRow: View {
         case .launchAgent: return "Stop (unload now)"
         }
     }
+
+    private var disableHelp: String {
+        s.domain == "machine"
+            ? "Disable — blocks auto-start for your user"
+            : "Disable — stop and block auto-restart"
+    }
 }
 
-// MARK: - Small icon button
+// MARK: - Small controls
+
+struct Chip: View {
+    let label: String
+    let system: String
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            Label(label, systemImage: system)
+                .font(.system(size: 10.5))
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(hover ? Color.secondary.opacity(0.22) : Color.secondary.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+}
 
 struct IconButton: View {
     let system: String

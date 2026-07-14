@@ -116,11 +116,16 @@ enum ServiceControl {
 
     // MARK: Disable / Enable (launch agents)
 
-    /// Stop now AND move the plist out of LaunchAgents so macOS can't relaunch it.
+    /// Stop now AND block every future auto-start.
+    ///
+    /// User agents additionally get their plist parked out of LaunchAgents.
+    /// Machine agents (/Library) are admin-owned, so we rely on launchd's
+    /// per-user disable record alone — it blocks load at login for this user.
     private static func disableAgent(_ s: BackgroundService) -> String? {
         guard s.kind == .launchAgent, let label = s.label, let plist = s.plistPath else { return "Not a launch agent" }
         Shell.run("/bin/launchctl", ["bootout", "gui/\(uid)/\(label)"])
         Shell.run("/bin/launchctl", ["disable", "gui/\(uid)/\(label)"])
+        if s.domain == "machine" { return nil }
         let fm = FileManager.default
         try? fm.createDirectory(at: ServiceScanner.parkedDir, withIntermediateDirectories: true)
         let dest = ServiceScanner.parkedDir.appendingPathComponent((plist as NSString).lastPathComponent)
@@ -130,16 +135,27 @@ enum ServiceControl {
         return nil
     }
 
-    /// Reverse of disable: restore the plist, re-enable and load it.
+    /// Reverse of disable: clear the disable record, restore the plist if it
+    /// was parked, and load it again.
     private static func enableAgent(_ s: BackgroundService) -> String? {
-        guard s.kind == .launchAgent, let label = s.label, let parked = s.plistPath else { return "Not a launch agent" }
+        guard s.kind == .launchAgent, let label = s.label, let plist = s.plistPath else { return "Not a launch agent" }
+        Shell.run("/bin/launchctl", ["enable", "gui/\(uid)/\(label)"])
+
+        let source = URL(fileURLWithPath: plist)
+        // Machine agents — and user agents that were disabled without parking —
+        // already live where launchd expects them. Never "move" a plist onto
+        // itself: the remove-then-move dance would delete it.
+        if s.domain == "machine" || source.deletingLastPathComponent().path == ServiceScanner.agentsDir.path {
+            let r = Shell.run("/bin/launchctl", ["bootstrap", "gui/\(uid)", plist])
+            return r.ok ? nil : "Couldn't re-enable: \(short(r.err))"
+        }
+
         let fm = FileManager.default
         try? fm.createDirectory(at: ServiceScanner.agentsDir, withIntermediateDirectories: true)
-        let dest = ServiceScanner.agentsDir.appendingPathComponent((parked as NSString).lastPathComponent)
+        let dest = ServiceScanner.agentsDir.appendingPathComponent(source.lastPathComponent)
         try? fm.removeItem(at: dest)
-        do { try fm.moveItem(atPath: parked, toPath: dest.path) }
+        do { try fm.moveItem(atPath: plist, toPath: dest.path) }
         catch { return "Couldn't restore plist: \(error.localizedDescription)" }
-        Shell.run("/bin/launchctl", ["enable", "gui/\(uid)/\(label)"])
         let r = Shell.run("/bin/launchctl", ["bootstrap", "gui/\(uid)", dest.path])
         return r.ok ? nil : "Couldn't re-enable: \(short(r.err))"
     }

@@ -1,12 +1,18 @@
 import Foundation
 
-/// Discovers background things from three sources: launch agents, Homebrew
-/// services, and loose processes holding a listening TCP port.
+/// Discovers background things from five sources: user launch agents,
+/// machine-wide launch agents, Homebrew services, processes holding a
+/// listening TCP port, and background resource hogs.
 enum ServiceScanner {
     static let uid = getuid()
 
     static let agentsDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/LaunchAgents")
+
+    /// Machine-wide agents (all users). They load into each user's gui session,
+    /// so launchctl bootout/bootstrap work on them without root — only their
+    /// plist files are admin-owned.
+    static let machineAgentsDir = URL(fileURLWithPath: "/Library/LaunchAgents")
 
     /// Where we park plists that the user has "disabled" so launchd ignores
     /// them. launchd only scans the top level of LaunchAgents, never
@@ -20,36 +26,53 @@ enum ServiceScanner {
 
     // MARK: Top-level scan
 
-    static func scan() -> [ServiceGroup] {
+    static func scan(freshBrew: Bool = true) -> [ServiceGroup] {
         let list = parseLaunchctlList()
-        let agentFiles = readAgentPlists(in: agentsDir)
+        let disabledSet = parseDisabledLabels(Shell.run("/bin/launchctl", ["print-disabled", "gui/\(uid)"]).out)
+        let userFiles = readAgentPlists(in: agentsDir)
+        let machineFiles = readAgentPlists(in: machineAgentsDir)
         let portsByPid = listeningPorts()
 
         // One ps snapshot covering every pid we might display, instead of
         // several ps round-trips per row.
         var interesting = Set(portsByPid.keys)
-        for f in agentFiles {
+        for f in userFiles + machineFiles {
             if let pid = list.pids[f.label] { interesting.insert(pid) }
         }
         let snap = psSnapshot(Array(interesting))
 
-        let agentsAll = buildAgents(agentFiles, list: list, snap: snap)
+        let userAgentsAll = buildAgents(userFiles, list: list, snap: snap, domain: "user", disabled: disabledSet)
         // `brew services start` copies its plists into ~/Library/LaunchAgents;
         // those belong in the Homebrew section, not duplicated here.
-        let agents = agentsAll.filter { !isBrewManagedLabel($0.label ?? "") }
-        let disabled = discoverDisabledAgents()
-        let brew = discoverBrew()
+        let userAgents = userAgentsAll.filter { !isBrewManagedLabel($0.label ?? "") }
+        let machineAgents = buildAgents(machineFiles, list: list, snap: snap, domain: "machine", disabled: disabledSet)
+        let parked = discoverDisabledAgents()
+        let brew = discoverBrew(fresh: freshBrew)
 
-        var skip = Set(agentsAll.compactMap { $0.pid })
+        var skip = Set(userAgentsAll.compactMap { $0.pid })
+        skip.formUnion(machineAgents.compactMap { $0.pid })
         for (label, pid) in list.pids where isBrewManagedLabel(label) { skip.insert(pid) }
         skip.insert(Int(getpid()))
         let procs = buildProcesses(portsByPid, snap: snap, excludePids: skip)
+
+        // Hogs: heavy background processes that hold no port and aren't agents.
+        var hogExclude = skip
+        hogExclude.formUnion(portsByPid.keys)
+        let hogRows = parseHogsPs(Shell.run("/bin/ps", ["axo", "pid=,pcpu=,rss=,etime=,comm="]).out)
+        let hogs = buildHogs(hogRows, excludePids: hogExclude)
 
         var groups: [ServiceGroup] = []
         groups.append(ServiceGroup(
             id: "agents", title: "Auto-start Agents",
             subtitle: "Launch agents in ~/Library/LaunchAgents — these can relaunch themselves",
-            services: agents.sorted { $0.name.lowercased() < $1.name.lowercased() }))
+            services: userAgents.sorted { $0.name.lowercased() < $1.name.lowercased() }))
+
+        if !machineAgents.isEmpty {
+            groups.append(ServiceGroup(
+                id: "machine", title: "Machine-wide Agents",
+                subtitle: "Installed for all users in /Library/LaunchAgents — disabling blocks them for your user",
+                services: machineAgents.sorted { $0.name.lowercased() < $1.name.lowercased() }))
+        }
 
         if !brew.isEmpty {
             groups.append(ServiceGroup(
@@ -63,11 +86,18 @@ enum ServiceScanner {
             subtitle: "Processes holding a network port right now",
             services: procs.sorted { rank($0.state) != rank($1.state) ? rank($0.state) < rank($1.state) : $0.name.lowercased() < $1.name.lowercased() }))
 
-        if !disabled.isEmpty {
+        if !hogs.isEmpty {
+            groups.append(ServiceGroup(
+                id: "hogs", title: "Resource Hogs",
+                subtitle: "Background processes using significant CPU or memory",
+                services: hogs))
+        }
+
+        if !parked.isEmpty {
             groups.append(ServiceGroup(
                 id: "disabled", title: "Disabled (parked)",
                 subtitle: "Stopped and moved aside so macOS won't auto-start them",
-                services: disabled.sorted { $0.name.lowercased() < $1.name.lowercased() }))
+                services: parked.sorted { $0.name.lowercased() < $1.name.lowercased() }))
         }
         return groups
     }
@@ -81,7 +111,7 @@ enum ServiceScanner {
         label.hasPrefix("homebrew.")
     }
 
-    // MARK: launchctl list
+    // MARK: launchctl list / print-disabled
 
     /// Returns the set of loaded labels and a map of label -> pid for running ones.
     static func parseLaunchctlList() -> (loaded: Set<String>, pids: [String: Int]) {
@@ -99,6 +129,18 @@ enum ServiceScanner {
             if let pid = Int(cols[0]) { pids[cols[2]] = pid }
         }
         return (loaded, pids)
+    }
+
+    /// Parses `launchctl print-disabled gui/<uid>`: lines like
+    ///   "com.foo.bar" => disabled
+    static func parseDisabledLabels(_ output: String) -> Set<String> {
+        var out = Set<String>()
+        for line in output.split(separator: "\n") where line.contains("=> disabled") {
+            if let a = line.firstIndex(of: "\""), let b = line.lastIndex(of: "\""), a < b {
+                out.insert(String(line[line.index(after: a)..<b]))
+            }
+        }
+        return out
     }
 
     // MARK: ps snapshot
@@ -168,7 +210,9 @@ enum ServiceScanner {
 
     static func buildAgents(_ files: [AgentPlist],
                             list: (loaded: Set<String>, pids: [String: Int]),
-                            snap: [Int: ProcInfo]) -> [BackgroundService] {
+                            snap: [Int: ProcInfo],
+                            domain: String,
+                            disabled: Set<String>) -> [BackgroundService] {
         var out: [BackgroundService] = []
         for f in files {
             let pid = list.pids[f.label]
@@ -179,6 +223,8 @@ enum ServiceScanner {
                 state = (snap[pid]?.state.hasPrefix("T") ?? false) ? .paused : .running
             } else if isLoaded {
                 state = .loaded
+            } else if disabled.contains(f.label) {
+                state = .disabled
             } else {
                 state = .unloaded
             }
@@ -189,13 +235,15 @@ enum ServiceScanner {
             var parts: [String] = []
             if let pid { parts.append("pid \(pid)") }
             if keepAlive { parts.append("↻ auto-restart") }
-            parts.append(shorten(cmd, 44))
+            if domain == "machine" { parts.append("all users") }
+            parts.append(middleShorten(cmd, domain == "machine" ? 34 : 42))
 
             out.append(BackgroundService(
-                id: "agent:" + f.label, name: f.label, subtitle: parts.joined(separator: " · "),
+                id: "agent:\(domain):" + f.label, name: f.label, subtitle: parts.joined(separator: " · "),
                 kind: .launchAgent, state: state, pid: pid,
                 label: f.label, plistPath: f.url.path, command: cmd,
-                protected: isAppleLabel(f.label)))
+                protected: isAppleLabel(f.label), domain: domain,
+                logPath: f.dict["StandardOutPath"] as? String))
         }
         return out
     }
@@ -204,7 +252,7 @@ enum ServiceScanner {
         readAgentPlists(in: parkedDir).map { f in
             let cmd = programSummary(f.dict)
             return BackgroundService(
-                id: "disabled:" + f.label, name: f.label, subtitle: shorten(cmd, 52),
+                id: "disabled:" + f.label, name: f.label, subtitle: middleShorten(cmd, 52),
                 kind: .launchAgent, state: .disabled, pid: nil,
                 label: f.label, plistPath: f.url.path, command: cmd)
         }
@@ -212,8 +260,23 @@ enum ServiceScanner {
 
     // MARK: Homebrew
 
-    static func discoverBrew() -> [BackgroundService] {
-        parseBrew(Shell.run(brewPath, ["services", "list", "--json"]).out)
+    private static let brewCacheLock = NSLock()
+    private static var brewCache: (services: [BackgroundService], at: Date)?
+
+    /// `brew services list` boots ruby (~1s+), so auto-refresh ticks reuse a
+    /// short-lived cache; manual refreshes and post-action rescans go fresh.
+    static func discoverBrew(fresh: Bool = true) -> [BackgroundService] {
+        brewCacheLock.lock()
+        let cached = brewCache
+        brewCacheLock.unlock()
+        if !fresh, let cached, Date().timeIntervalSince(cached.at) < 30 {
+            return cached.services
+        }
+        let services = parseBrew(Shell.run(brewPath, ["services", "list", "--json"]).out)
+        brewCacheLock.lock()
+        brewCache = (services, Date())
+        brewCacheLock.unlock()
+        return services
     }
 
     /// Pure parser split out so it can be unit-tested without Homebrew.
@@ -287,6 +350,72 @@ enum ServiceScanner {
         return out
     }
 
+    // MARK: Resource hogs
+
+    struct HogRow {
+        let pid: Int
+        let cpu: Double
+        let rssKB: Int
+        let etime: String
+        let comm: String
+    }
+
+    /// Pure parser for `ps axo pid=,pcpu=,rss=,etime=,comm=` output.
+    static func parseHogsPs(_ output: String) -> [HogRow] {
+        var rows: [HogRow] = []
+        for line in output.split(separator: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            let p = t.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
+            guard p.count == 5, let pid = Int(p[0]), let cpu = Double(p[1]), let rss = Int(p[2]) else { continue }
+            rows.append(HogRow(pid: pid, cpu: cpu, rssKB: rss, etime: String(p[3]),
+                               comm: String(p[4]).trimmingCharacters(in: .whitespaces)))
+        }
+        return rows
+    }
+
+    /// Background processes burning real CPU (>= cpuFloor %) or memory
+    /// (>= memFloorKB) that aren't already shown elsewhere. System processes
+    /// are dropped — they'd be noise the user can't act on anyway.
+    static func buildHogs(_ rows: [HogRow], excludePids: Set<Int>,
+                          cpuFloor: Double = 15, memFloorKB: Int = 1_048_576,
+                          limit: Int = 8) -> [BackgroundService] {
+        let picked = rows
+            .filter { !excludePids.contains($0.pid) && ($0.cpu >= cpuFloor || $0.rssKB >= memFloorKB) }
+            .sorted { $0.cpu > $1.cpu }
+        var out: [BackgroundService] = []
+        for r in picked {
+            let (type, protected) = classify(comm: r.comm, cmd: r.comm)
+            if protected { continue }
+            let mem = r.rssKB >= 1_048_576
+                ? String(format: "%.1f GB", Double(r.rssKB) / 1_048_576)
+                : "\(r.rssKB / 1024) MB"
+            out.append(BackgroundService(
+                id: "hog:\(r.pid)",
+                name: processName(comm: r.comm, cmd: r.comm),
+                subtitle: String(format: "%.0f%% CPU · %@ · up %@", r.cpu, mem, prettyEtime(r.etime)),
+                kind: .process, state: .running, pid: r.pid,
+                command: r.comm,
+                // "hog-" prefix keeps Restart off: we only know the executable
+                // path here, not the original arguments.
+                procType: "hog-\(type)"))
+            if out.count == limit { break }
+        }
+        return out
+    }
+
+    /// "02-23:00:54" -> "2d 23h", "23:13:12" -> "23h 13m", "17:55" -> "17m"
+    static func prettyEtime(_ e: String) -> String {
+        var days = 0
+        var clock = e
+        let dp = e.split(separator: "-", maxSplits: 1)
+        if dp.count == 2, let d = Int(dp[0]) { days = d; clock = String(dp[1]) }
+        let c = clock.split(separator: ":").compactMap { Int($0) }
+        if days > 0 { return "\(days)d \(c.first ?? 0)h" }
+        if c.count == 3 { return c[0] > 0 ? "\(c[0])h \(c[1])m" : "\(c[1])m" }
+        if c.count == 2 { return "\(c[0])m" }
+        return e
+    }
+
     static func cwd(of pid: Int) -> String? {
         let r = Shell.run("/usr/sbin/lsof", ["-a", "-d", "cwd", "-Fn", "-p", "\(pid)"])
         for line in r.out.split(separator: "\n") where line.hasPrefix("n") {
@@ -323,7 +452,8 @@ enum ServiceScanner {
         let c = comm.lowercased()
         let both = (comm + " " + cmd).lowercased()
         if comm.hasPrefix("/System/") || comm.hasPrefix("/usr/libexec")
-            || comm.hasPrefix("/usr/sbin") || comm.hasPrefix("/usr/bin") {
+            || comm.hasPrefix("/usr/sbin") || comm.hasPrefix("/usr/bin")
+            || comm.hasPrefix("/sbin") || comm.hasPrefix("/bin") {
             return ("system", true)
         }
         for name in ["rapportd", "controlce", "controlcenter", "sharingd", "identityservices"] where c.contains(name) {
@@ -337,10 +467,14 @@ enum ServiceScanner {
     }
 
     static func processName(comm: String, cmd: String) -> String {
-        if let m = cmd.range(of: #"[^\s]+\.py"#, options: .regularExpression) {
+        // Lookahead keeps ".pyenv"-style interpreter paths from matching.
+        if let m = cmd.range(of: #"[^\s]+\.py(?=\s|$)"#, options: .regularExpression) {
             return String(cmd[m]).split(separator: "/").last.map(String.init) ?? "python"
         }
         if cmd.contains("http.server") { return "http.server" }
+        if let m = cmd.range(of: #"-m ([\w\.]+)"#, options: .regularExpression) {
+            return String(cmd[m].dropFirst(3))   // `python -m orion.server` -> orion.server
+        }
         if let r = comm.range(of: ".app/Contents/MacOS/") {
             return comm[..<r.lowerBound].split(separator: "/").last.map(String.init) ?? comm
         }
@@ -353,7 +487,12 @@ enum ServiceScanner {
         return Int(addr[addr.index(after: colon)...])
     }
 
-    static func shorten(_ s: String, _ n: Int) -> String {
-        s.count > n ? String(s.prefix(n - 1)) + "…" : s
+    /// Ellipsize the middle so the informative tail (script name, args) survives.
+    static func middleShorten(_ s: String, _ n: Int) -> String {
+        guard s.count > n else { return s }
+        let keep = n - 1
+        let head = keep * 2 / 3
+        let tail = keep - head
+        return String(s.prefix(head)) + "…" + String(s.suffix(tail))
     }
 }

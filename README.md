@@ -21,8 +21,10 @@ bgviewer sits in your menu bar, finds all of it, shows you where each thing come
 | Section | Source | Typical residents |
 |---|---|---|
 | **Auto-start Agents** | `~/Library/LaunchAgents/*.plist` | that script you wired up months ago, app updaters |
+| **Machine-wide Agents** | `/Library/LaunchAgents` (all users) | vendor agents — Zoom updaters, Logitech, AV tools |
 | **Homebrew Services** | `brew services` | postgres, redis, kafka, nginx |
 | **Listening Processes** | anything holding a TCP port (`lsof`) | forgotten `python -m http.server`, dev servers |
+| **Resource Hogs** | background processes burning CPU or RAM | that helper app quietly eating 25% CPU for days |
 | **Disabled (parked)** | agents you disabled via bgviewer | one click to bring them back |
 
 Agents that can resurrect themselves are marked **↻ auto-restart**, so you know *why* something keeps coming back. Apple system processes get a 🔒 and no destructive buttons — you can't accidentally break your Mac.
@@ -38,6 +40,8 @@ Agents that can resurrect themselves are marked **↻ auto-restart**, so you kno
 | ↩ | **Re-enable** | Undo a disable, verbatim. |
 
 Every action is verified after it runs; if something fails, the reason shows up in the footer. Nothing fails silently.
+
+Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command), the list **auto-refreshes every few seconds while open**, and a footer toggle starts bgviewer **at login**.
 
 ## How Disable works (and why it's safe)
 
@@ -107,7 +111,7 @@ Sources/
   ServiceStore.swift    observable state for the UI
   Views.swift           SwiftUI dropdown
   Shell.swift           subprocess runner (concurrent pipes + timeout watchdog)
-Tests/main.swift        59-check test suite
+Tests/main.swift        88-check test suite
 build.sh                builds bgviewer.app with plain swiftc — no Xcode project
 test.sh                 compiles and runs the tests
 release.sh              stamps a version, builds, zips into dist/

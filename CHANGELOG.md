@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.0 — 2026-07-14
+
+Coverage release — bgviewer now sees the background things that don't hold a port.
+
+- **Machine-wide Agents**: `/Library/LaunchAgents` (Zoom/Logitech/AV-style vendor
+  agents). Stop/restart work as usual; Disable uses launchd's per-user disable
+  record — no admin rights needed, reversible per user
+- **Resource Hogs**: background processes with sustained CPU (≥15%) or memory
+  (≥1 GB) that hold no port — the "helper app quietly at 25% for days" class
+- **Row details** on click: full command, Copy command, Reveal plist, View log,
+  open `localhost:<port>` for dev servers
+- **Search/filter** across names, ports, and command lines
+- **Auto-refresh** every 6 s while the dropdown is open (brew status cached to
+  keep ticks cheap)
+- **Start at login** toggle in the footer (SMAppService)
+- "Show inactive" is now off by default (persisted preference)
+- Fixed: interpreter paths like `.pyenv` no longer mislabel `python -m` services;
+  `python -m pkg.mod` rows are named by their module
+- Safety: enabling an agent that was disabled-but-not-parked can no longer
+  delete its plist (regression-tested)
+- Test suite grown to 88 checks
+
 ## 1.0.2 — 2026-07-13
 
 - New app icon (designed artwork run through the squircle pipeline in

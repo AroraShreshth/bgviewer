@@ -35,7 +35,9 @@ struct BackgroundService: Identifiable, Sendable {
     var command: String? = nil      // full argv, used for tooltip + process restart
     var ports: [Int] = []
     var protected: Bool = false     // Apple/system process — destructive actions disabled
-    var procType: String = ""       // "dev" | "app" | "system" | "other"
+    var procType: String = ""       // "dev" | "app" | "system" | "other" (hogs get a "hog-" prefix)
+    var domain: String = "user"     // launch agents: "user" (~/Library) or "machine" (/Library)
+    var logPath: String? = nil      // agent StandardOutPath, when declared
 }
 
 struct ServiceGroup: Identifiable, Sendable {

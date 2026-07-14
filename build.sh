@@ -24,6 +24,7 @@ for ARCH in arm64 x86_64; do
 		Sources/Views.swift \
 		Sources/BgviewerApp.swift \
 		-framework SwiftUI -framework AppKit -framework Foundation \
+		-framework ServiceManagement \
 		-o "$BIN-$ARCH"
 	SLICES+=("$BIN-$ARCH")
 done

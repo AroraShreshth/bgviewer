@@ -20,11 +20,15 @@ final class ServiceStore: ObservableObject {
         return n
     }
 
-    func refresh() {
+    /// Manual refreshes rescan everything; auto ticks (the 6s timer while the
+    /// dropdown is open) reuse the short-lived brew cache and keep any error
+    /// message on screen.
+    func refresh(auto: Bool = false) {
+        if auto && isLoading { return }
         isLoading = true
-        statusMessage = nil
+        if !auto { statusMessage = nil }
         Task.detached(priority: .userInitiated) {
-            let g = ServiceScanner.scan()
+            let g = ServiceScanner.scan(freshBrew: !auto)
             await MainActor.run {
                 self.groups = g
                 self.isLoading = false

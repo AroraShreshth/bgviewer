@@ -75,6 +75,8 @@ func testParsing() {
 
     check("processName picks .py script", ServiceScanner.processName(comm: "/x/python3", cmd: "/x/python3 /a/live_receiver.py --port 8787") == "live_receiver.py")
     check("processName http.server", ServiceScanner.processName(comm: "/x/python", cmd: "python -m http.server 8092") == "http.server")
+    check("processName ignores .pyenv interpreter path", ServiceScanner.processName(comm: "/u/.pyenv/versions/3.12.3/bin/python3", cmd: "/u/.pyenv/versions/3.12.3/bin/python3 -m orion.server") == "orion.server")
+    check("processName names -m module runs", ServiceScanner.processName(comm: "/x/python3", cmd: "/x/python3 -m mypkg.web --port 1") == "mypkg.web")
     check("processName app name from bundle", ServiceScanner.processName(comm: "/Applications/Zed.app/Contents/MacOS/zed", cmd: "zed") == "Zed")
 
     let lc = "PID\tStatus\tLabel\n837\t0\tcom.healthtop.livereceiver\n-\t0\tcom.orion.fetch\n-\t78\tcom.healthtop.refresh"
@@ -161,6 +163,74 @@ func testEligibility() {
 
     let brew = svc(kind: .brewService, state: .running, brew: "redis")
     check("brew running: stop+restart, no pause", brew.showStop && brew.canRestart && !brew.canPause)
+}
+
+// ───────────────────────── Unit: v1.1 additions ─────────────────────────
+
+func testDisabledParsing() {
+    print("\n• Unit — launchctl print-disabled parsing")
+    let sample = """
+    \tdisabled services = {
+    \t\t"com.docker.helper" => enabled
+    \t\t"com.apple.ManagedClientAgent.enrollagent" => disabled
+    \t\t"com.foo.bar" => disabled
+    \t}
+    """
+    let d = ServiceScanner.parseDisabledLabels(sample)
+    check("disabled labels extracted", d == Set(["com.apple.ManagedClientAgent.enrollagent", "com.foo.bar"]))
+    check("enabled labels not included", !d.contains("com.docker.helper"))
+    check("garbage input -> empty", ServiceScanner.parseDisabledLabels("nope").isEmpty)
+}
+
+func testEtimeAndShorten() {
+    print("\n• Unit — uptime formatting + middle truncation")
+    check("etime days", ServiceScanner.prettyEtime("02-23:00:54") == "2d 23h")
+    check("etime hours", ServiceScanner.prettyEtime("23:13:12") == "23h 13m")
+    check("etime sub-hour", ServiceScanner.prettyEtime("00:17:55") == "17m")
+    check("etime minutes", ServiceScanner.prettyEtime("17:55") == "17m")
+    let long = "/Users/shreshth/.pyenv/versions/3.12.3/bin/python3 /Users/shreshth/Desktop/live_receiver.py --port 8787"
+    let cut = ServiceScanner.middleShorten(long, 44)
+    check("middleShorten keeps the informative tail", cut.count <= 44 && cut.hasSuffix("--port 8787") && cut.contains("…"))
+    check("middleShorten leaves short strings alone", ServiceScanner.middleShorten("abc", 44) == "abc")
+}
+
+func testHogs() {
+    print("\n• Unit — resource hogs")
+    let out = """
+          837  48.0  123456 10-13:32:39 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+          900  28.9  345678 02-23:00:54 /Applications/Wispr Flow.app/Contents/Frameworks/Wispr Flow Helper.app/Contents/MacOS/Wispr Flow Helper
+          901   0.1 2097152    23:13:12 /Applications/Big.app/Contents/MacOS/Big
+          902   5.0    1024       17:55 /Applications/Quiet.app/Contents/MacOS/Quiet
+          903  99.0    2048    01:02:03 /Applications/Excluded.app/Contents/MacOS/Excluded
+    """
+    let rows = ServiceScanner.parseHogsPs(out)
+    check("hog rows parsed, comm with spaces intact", rows.count == 5 && rows[1].comm.hasSuffix("Wispr Flow Helper"))
+    let hogs = ServiceScanner.buildHogs(rows, excludePids: [903])
+    check("system process never a hog (WindowServer)", !hogs.contains { $0.pid == 837 })
+    check("sustained-CPU helper picked up", hogs.contains { $0.pid == 900 })
+    check("memory hog picked up (2 GB, idle)", hogs.contains { $0.pid == 901 })
+    check("quiet process not flagged", !hogs.contains { $0.pid == 902 })
+    check("already-shown pid excluded", !hogs.contains { $0.pid == 903 })
+    check("sorted by CPU, worst first", hogs.first?.pid == 900)
+    check("hogs offer stop+pause but never restart", hogs.allSatisfy { $0.showStop && $0.canPause && !$0.canRestart })
+    check("hog subtitle carries cpu · mem · uptime", hogs.first?.subtitle.contains("29% CPU") == true && hogs.first!.subtitle.contains("up 2d 23h"))
+}
+
+func testMachineAgents() {
+    print("\n• Unit — machine-wide agents")
+    let plist = ServiceScanner.AgentPlist(
+        url: URL(fileURLWithPath: "/Library/LaunchAgents/us.zoom.updater.plist"),
+        dict: ["Label": "us.zoom.updater", "ProgramArguments": ["/x/zoom", "--check"]],
+        label: "us.zoom.updater")
+    let none: (loaded: Set<String>, pids: [String: Int]) = ([], [:])
+    let a = ServiceScanner.buildAgents([plist], list: none, snap: [:], domain: "machine", disabled: ["us.zoom.updater"])
+    check("launchd disable record -> disabled state", a.first?.state == .disabled)
+    check("machine domain + 'all users' marker", a.first?.domain == "machine" && a.first!.subtitle.contains("all users"))
+    check("disabled machine agent: enable yes, disable no", a.first!.canEnable && !a.first!.canDisable)
+    let b = ServiceScanner.buildAgents([plist], list: (["us.zoom.updater"], ["us.zoom.updater": 55]), snap: [:], domain: "machine", disabled: [])
+    check("running machine agent has pid + controls", b.first?.state == .running && b.first?.pid == 55 && b.first!.canDisable)
+    let c = ServiceScanner.buildAgents([plist], list: none, snap: [:], domain: "user", disabled: [])
+    check("user agent unaffected by machine logic", c.first?.state == .unloaded && c.first?.domain == "user")
 }
 
 // ─────────────── Integration: STOP really stops ───────────────
@@ -253,6 +323,49 @@ func testAgentLifecycle() {
     check("cleanup: nothing left behind", !fm.fileExists(atPath: plistPath) && !fm.fileExists(atPath: parkedPath) && !ServiceScanner.parseLaunchctlList().loaded.contains(label))
 }
 
+// ─────── Integration: enabling a disabled-but-NOT-parked agent must not eat the plist ───────
+
+func testDisabledOnlyEnable() {
+    print("\n• Integration — enable of a disabled-but-not-parked agent")
+    let label = "com.bgviewer.selftest2"
+    let uid = getuid()
+    let fm = FileManager.default
+    let plistPath = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/LaunchAgents/\(label).plist").path
+
+    // Clean slate.
+    Shell.run("/bin/launchctl", ["bootout", "gui/\(uid)/\(label)"])
+    Shell.run("/bin/launchctl", ["enable", "gui/\(uid)/\(label)"])
+    try? fm.removeItem(atPath: plistPath)
+
+    let xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0"><dict>
+    <key>Label</key><string>\(label)</string>
+    <key>ProgramArguments</key><array><string>/bin/sleep</string><string>100000</string></array>
+    <key>RunAtLoad</key><true/>
+    </dict></plist>
+    """
+    try? xml.write(toFile: plistPath, atomically: true, encoding: .utf8)
+
+    // Disabled via launchctl only — the plist stays in LaunchAgents,
+    // exactly like a machine agent or an externally-disabled user agent.
+    Shell.run("/bin/launchctl", ["disable", "gui/\(uid)/\(label)"])
+
+    let err = ServiceControl.perform(.enable, on: svc(kind: .launchAgent, state: .disabled, label: label, plist: plistPath))
+    check("enable non-parked: no error", err == nil)
+    check("enable non-parked: plist NOT deleted", fm.fileExists(atPath: plistPath))
+    usleep(700_000)
+    check("enable non-parked: agent loaded again", ServiceScanner.parseLaunchctlList().loaded.contains(label))
+
+    // Cleanup.
+    Shell.run("/bin/launchctl", ["bootout", "gui/\(uid)/\(label)"])
+    Shell.run("/bin/launchctl", ["enable", "gui/\(uid)/\(label)"])
+    try? fm.removeItem(atPath: plistPath)
+    check("cleanup: nothing left behind", !fm.fileExists(atPath: plistPath) && !ServiceScanner.parseLaunchctlList().loaded.contains(label))
+}
+
 // ───────────────────────────── run ─────────────────────────────
 
 print("Running bgviewer tests\(unitOnly ? " (unit only)" : "")")
@@ -260,12 +373,17 @@ testShell()
 testParsing()
 testPsMerge()
 testEligibility()
+testDisabledParsing()
+testEtimeAndShorten()
+testHogs()
+testMachineAgents()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
 } else {
     testProcessStop()
     testPauseResume()
     testAgentLifecycle()
+    testDisabledOnlyEnable()
 }
 
 print("\n────────────────────────────")
