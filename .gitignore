@@ -4,6 +4,9 @@ dist/
 *.o
 .build/
 
+# Local working notes — intentionally untracked
+PUBLISH_CHECKLIST.md
+
 # macOS
 .DS_Store
 
