@@ -20,9 +20,14 @@ struct RootView: View {
     @State private var search = ""
     @State private var expandedId: String?
     @State private var isOpen = false
+    @State private var showInfo: Bool
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
 
     private let ticker = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
+
+    init(showInfoInitially: Bool = false) {
+        _showInfo = State(initialValue: showInfoInitially)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,6 +52,11 @@ struct RootView: View {
     private var header: some View {
         VStack(spacing: 8) {
             HStack(spacing: 9) {
+                IconButton(system: showInfo ? "info.circle.fill" : "info.circle",
+                           color: showInfo ? .blue : .gray,
+                           help: "What everything here means") {
+                    withAnimation(.easeInOut(duration: 0.15)) { showInfo.toggle() }
+                }
                 Image(systemName: "gauge.with.dots.needle.bottom.50percent")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.tint)
@@ -80,7 +90,15 @@ struct RootView: View {
         .padding(.vertical, 10)
     }
 
-    private var content: some View {
+    @ViewBuilder private var content: some View {
+        if showInfo {
+            InfoPanel()
+        } else {
+            listContent
+        }
+    }
+
+    private var listContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if displayGroups.isEmpty {
@@ -184,6 +202,95 @@ struct RootView: View {
             return "v\(v) · updated \(store.lastUpdated)"
         }
         return "updated \(store.lastUpdated)"
+    }
+}
+
+// MARK: - Info / help panel
+
+struct InfoPanel: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("What bgviewer sees")
+                InfoRow(icon: "folder.badge.gearshape", color: .blue, title: "Auto-start Agents",
+                        text: "Your ~/Library/LaunchAgents. ↻ means launchd relaunches it whenever it's killed — the classic \"it keeps coming back\".")
+                InfoRow(icon: "building.2", color: .teal, title: "Machine-wide Agents",
+                        text: "/Library/LaunchAgents — installed for all users (Zoom, Logitech, AV tools). Disabling blocks them for your user only.")
+                InfoRow(icon: "cup.and.saucer", color: .brown, title: "Homebrew Services",
+                        text: "Everything managed by `brew services` — postgres, redis, kafka…")
+                InfoRow(icon: "network", color: .green, title: "Listening Processes",
+                        text: "Anything holding a TCP port right now — forgotten dev servers live here.")
+                InfoRow(icon: "flame", color: .orange, title: "Resource Hogs",
+                        text: "No port, but quietly burning ≥15% CPU or ≥1 GB RAM in the background.")
+                InfoRow(icon: "nosign", color: .purple, title: "Disabled (parked)",
+                        text: "Blocked from auto-starting. Nothing is ever deleted — plists are parked in \"Disabled by bgviewer\" and restored on re-enable.")
+
+                sectionTitle("Buttons")
+                InfoRow(icon: "stop.fill", color: .red, title: "Stop",
+                        text: "Quit now. Defeats KeepAlive so it stays stopped; stubborn processes get TERM, then KILL.")
+                InfoRow(icon: "pause.fill", color: .orange, title: "Pause / Resume",
+                        text: "Freeze it in place — RAM kept, CPU freed.")
+                InfoRow(icon: "arrow.clockwise", color: .blue, title: "Restart",
+                        text: "Stop and start again in place.")
+                InfoRow(icon: "nosign", color: .purple, title: "Disable / Re-enable",
+                        text: "Stop and block every future auto-start — until you flip it back.")
+                InfoRow(icon: "lock.fill", color: .gray, title: "Locked",
+                        text: "Apple system process — bgviewer never touches these.")
+
+                sectionTitle("Tips")
+                InfoRow(icon: "hand.tap", color: .secondaryInfo, title: "Click any row",
+                        text: "Full command, Copy, Reveal plist, View log — and one-click localhost links for dev servers.")
+                InfoRow(icon: "clock.arrow.circlepath", color: .secondaryInfo, title: "Always current",
+                        text: "The list re-scans every few seconds while open.")
+
+                HStack(spacing: 8) {
+                    Chip(label: "GitHub — docs & issues", system: "arrow.up.right.square") {
+                        if let url = URL(string: "https://github.com/AroraShreshth/bgviewer") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    Spacer()
+                    Text("Free · MIT · no telemetry")
+                        .font(.system(size: 10)).foregroundStyle(.tertiary)
+                }
+                .padding(.top, 2)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .frame(height: 440)
+    }
+
+    private func sectionTitle(_ t: String) -> some View {
+        Text(t.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.secondary)
+    }
+}
+
+private extension Color {
+    static let secondaryInfo = Color(nsColor: .secondaryLabelColor)
+}
+
+struct InfoRow: View {
+    let icon: String
+    let color: Color
+    let title: String
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 18, alignment: .center)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 1.5) {
+                Text(title).font(.system(size: 11.5, weight: .semibold))
+                Text(text).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

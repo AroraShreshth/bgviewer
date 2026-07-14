@@ -41,7 +41,7 @@ Agents that can resurrect themselves are marked **↻ auto-restart**, so you kno
 
 Every action is verified after it runs; if something fails, the reason shows up in the footer. Nothing fails silently.
 
-Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command), the list **auto-refreshes every few seconds while open**, and a footer toggle starts bgviewer **at login**.
+Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command), the list **auto-refreshes every few seconds while open**, and a footer toggle starts bgviewer **at login**. All of this is also explained in-app — the **ⓘ** button top-left.
 
 ## How Disable works (and why it's safe)
 

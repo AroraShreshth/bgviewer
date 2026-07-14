@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 — 2026-07-14
+
+- In-app help: an ⓘ button in the header explains every section and button,
+  the safety model (nothing is ever deleted), and links to the project
+
 ## 1.1.0 — 2026-07-14
 
 Coverage release — bgviewer now sees the background things that don't hold a port.
