@@ -42,7 +42,7 @@ Agents that can resurrect themselves are marked **↻ auto-restart**, so you kno
 
 Every action is verified after it runs; if something fails, the reason shows up in the footer. Nothing fails silently.
 
-Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command), the list **auto-refreshes every few seconds while open**, and footer toggles for **start at login** and **Alerts** — a notification the moment a new dev server starts listening, even while the dropdown is closed. A subtle **update button** appears in the header when a newer release exists (a daily GitHub check is the app's only network call). All of this is also explained in-app — the **ⓘ** button top-left.
+Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command) and the list **auto-refreshes every few seconds while open**. The **⚙ Settings panel** holds **Alerts** (a notification the moment a new dev server starts listening, even while the dropdown is closed), **start at login**, and an update check — one GitHub call at most every 6 hours is the app's only network access. A green **update button** appears in the header when a newer release exists. All of this is also explained in-app — the **ⓘ** button top-left.
 
 ## How Disable works (and why it's safe)
 

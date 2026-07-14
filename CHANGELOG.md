@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 — 2026-07-14
+
+- Settings panel (⚙ in the header): Alerts and Start-at-login moved out of the
+  footer, each with a plain-English explanation, plus an Updates section with
+  a check-now button and the no-telemetry disclosure
+- Footer slimmed back down to "Show all" + status
+
 ## 1.3.0 — 2026-07-14
 
 The awareness release.

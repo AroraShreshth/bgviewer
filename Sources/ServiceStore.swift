@@ -10,6 +10,7 @@ final class ServiceStore: ObservableObject {
     @Published var statusMessage: String?   // last action's error, shown in the footer
     @Published var alertsEnabled = false    // notify when a new dev server starts listening
     @Published var updateAvailable: String? // newer release tag, when one exists
+    @Published var updateStatus: String?    // result line for manual update checks
 
     private var watchTask: Task<Void, Never>?
 
@@ -126,23 +127,34 @@ final class ServiceStore: ObservableObject {
 
     // MARK: Update check
 
-    /// One lightweight GitHub API call, at most every 6 hours. This is the
-    /// app's only network access.
-    private func checkForUpdate() {
+    /// One lightweight GitHub API call, at most every 6 hours (or on demand
+    /// from Settings). This is the app's only network access.
+    func checkForUpdate(force: Bool = false) {
         guard Self.isRealApp else { return }
         let now = Date().timeIntervalSince1970
-        let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
-        guard now - last > 6 * 3600 else { return }
+        if !force {
+            let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
+            guard now - last > 6 * 3600 else { return }
+        }
         UserDefaults.standard.set(now, forKey: "lastUpdateCheck")
         let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        if force { updateStatus = "Checking…" }
         Task.detached { [weak self] in
             guard let url = URL(string: "https://api.github.com/repos/AroraShreshth/bgviewer/releases/latest"),
                   let (data, _) = try? await URLSession.shared.data(from: url),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tag = obj["tag_name"] as? String else { return }
+                  let tag = obj["tag_name"] as? String else {
+                if force { await MainActor.run { [weak self] in self?.updateStatus = "Couldn't reach GitHub" } }
+                return
+            }
             let remote = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
-            if isNewerVersion(remote, than: current) {
-                await MainActor.run { [weak self] in self?.updateAvailable = remote }
+            await MainActor.run { [weak self] in
+                if isNewerVersion(remote, than: current) {
+                    self?.updateAvailable = remote
+                    if force { self?.updateStatus = "v\(remote) is available" }
+                } else if force {
+                    self?.updateStatus = "Up to date — v\(current)"
+                }
             }
         }
     }

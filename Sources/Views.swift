@@ -21,12 +21,13 @@ struct RootView: View {
     @State private var expandedId: String?
     @State private var isOpen = false
     @State private var showInfo: Bool
-    @State private var loginEnabled = SMAppService.mainApp.status == .enabled
+    @State private var showSettings: Bool
 
     private let ticker = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
 
-    init(showInfoInitially: Bool = false) {
+    init(showInfoInitially: Bool = false, showSettingsInitially: Bool = false) {
         _showInfo = State(initialValue: showInfoInitially)
+        _showSettings = State(initialValue: showSettingsInitially)
     }
 
     var body: some View {
@@ -40,7 +41,6 @@ struct RootView: View {
         .frame(width: 404)
         .onAppear {
             isOpen = true
-            loginEnabled = SMAppService.mainApp.status == .enabled
             store.refresh()
         }
         .onDisappear { isOpen = false }
@@ -55,7 +55,10 @@ struct RootView: View {
                 IconButton(system: showInfo ? "info.circle.fill" : "info.circle",
                            color: showInfo ? .blue : .gray,
                            help: "What everything here means") {
-                    withAnimation(.easeInOut(duration: 0.15)) { showInfo.toggle() }
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showInfo.toggle()
+                        showSettings = false
+                    }
                 }
                 Image(systemName: "gauge.with.dots.needle.bottom.50percent")
                     .font(.system(size: 16, weight: .semibold))
@@ -74,6 +77,14 @@ struct RootView: View {
                     }
                 }
                 IconButton(system: "arrow.clockwise", color: .blue, help: "Rescan") { store.refresh() }
+                IconButton(system: showSettings ? "gearshape.fill" : "gearshape",
+                           color: showSettings ? .blue : .gray,
+                           help: "Settings — alerts, login, updates") {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showSettings.toggle()
+                        showInfo = false
+                    }
+                }
                 IconButton(system: "power", color: .red, help: "Quit bgviewer") { NSApp.terminate(nil) }
             }
             HStack(spacing: 6) {
@@ -101,6 +112,8 @@ struct RootView: View {
     @ViewBuilder private var content: some View {
         if showInfo {
             InfoPanel()
+        } else if showSettings {
+            SettingsPanel()
         } else {
             listContent
         }
@@ -159,27 +172,10 @@ struct RootView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Toggle("All", isOn: $showInactive)
+            Toggle("Show all", isOn: $showInactive)
                 .toggleStyle(.switch).controlSize(.mini)
                 .font(.system(size: 11))
                 .help("Include stopped and idle services")
-            Toggle("Alerts", isOn: Binding(get: { store.alertsEnabled }, set: { store.setAlerts($0) }))
-                .toggleStyle(.switch).controlSize(.mini)
-                .font(.system(size: 11))
-                .help("Notify when a new dev server starts listening")
-            Toggle("Login", isOn: $loginEnabled)
-                .toggleStyle(.switch).controlSize(.mini)
-                .font(.system(size: 11))
-                .help("Start bgviewer automatically when you log in")
-                .onChange(of: loginEnabled) { on in
-                    do {
-                        if on { try SMAppService.mainApp.register() }
-                        else { try SMAppService.mainApp.unregister() }
-                    } catch {
-                        store.statusMessage = "Login item: \(error.localizedDescription)"
-                        loginEnabled = SMAppService.mainApp.status == .enabled
-                    }
-                }
             Spacer()
             if let msg = store.statusMessage {
                 Label(msg, systemImage: "exclamationmark.triangle.fill")
@@ -214,6 +210,95 @@ struct RootView: View {
             return "v\(v) · updated \(store.lastUpdated)"
         }
         return "updated \(store.lastUpdated)"
+    }
+}
+
+// MARK: - Settings panel
+
+struct SettingsPanel: View {
+    @EnvironmentObject var store: ServiceStore
+    @State private var loginEnabled = SMAppService.mainApp.status == .enabled
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                sectionTitle("Notifications")
+                SettingRow(
+                    title: "New dev server alerts",
+                    caption: "Pings you the moment something new starts listening on a port — even while this window is closed. Watches once a minute; dev servers only, so browsers and regular apps never trigger it. macOS will ask for notification permission the first time.",
+                    isOn: Binding(get: { store.alertsEnabled }, set: { store.setAlerts($0) }))
+
+                sectionTitle("General")
+                SettingRow(
+                    title: "Start at login",
+                    caption: "Keeps the gauge in your menu bar after a restart. Registers bgviewer as a standard macOS login item — you can also manage it under System Settings → Login Items.",
+                    isOn: Binding(get: { loginEnabled }, set: { setLogin($0) }))
+
+                sectionTitle("Updates")
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Chip(label: "Check for updates", system: "arrow.triangle.2.circlepath") {
+                            store.checkForUpdate(force: true)
+                        }
+                        if let v = store.updateAvailable {
+                            Chip(label: "Get v\(v)", system: "arrow.down.circle") {
+                                if let url = URL(string: "https://github.com/AroraShreshth/bgviewer/releases/latest") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                        }
+                        Spacer()
+                        if let status = store.updateStatus {
+                            Text(status).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text("bgviewer checks GitHub for new releases at most once every 6 hours — its only network call. No telemetry, ever.")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .frame(height: 330)
+    }
+
+    private func setLogin(_ on: Bool) {
+        do {
+            if on { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
+            loginEnabled = on
+        } catch {
+            store.statusMessage = "Login item: \(error.localizedDescription)"
+            loginEnabled = SMAppService.mainApp.status == .enabled
+        }
+    }
+
+    private func sectionTitle(_ t: String) -> some View {
+        Text(t.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.secondary)
+    }
+}
+
+struct SettingRow: View {
+    let title: String
+    let caption: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2.5) {
+                Text(title).font(.system(size: 12, weight: .semibold))
+                Text(caption).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
     }
 }
 
@@ -257,7 +342,7 @@ struct InfoPanel: View {
                 InfoRow(icon: "clock.arrow.circlepath", color: .secondaryInfo, title: "Always current",
                         text: "The list re-scans every few seconds while open.")
                 InfoRow(icon: "bell.badge", color: .secondaryInfo, title: "Alerts",
-                        text: "Flip \"Alerts\" in the footer to get a notification whenever a new dev server starts listening — even while this window is closed.")
+                        text: "Turn on alerts in Settings (the ⚙ up top) to get a notification whenever a new dev server starts listening — even while this window is closed.")
 
                 HStack(spacing: 8) {
                     Chip(label: "GitHub — docs & issues", system: "arrow.up.right.square") {
