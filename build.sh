@@ -22,6 +22,7 @@ for ARCH in arm64 x86_64; do
 		Sources/ServiceControl.swift \
 		Sources/DiskScanner.swift \
 		Sources/DiskMap.swift \
+		Sources/DevJunk.swift \
 		Sources/DiskMapWindow.swift \
 		Sources/ServiceStore.swift \
 		Sources/Views.swift \

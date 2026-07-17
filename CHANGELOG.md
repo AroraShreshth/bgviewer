@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — 2026-07-17
+
+- **Dev Junk view** (second tab in the Disk Map window, or straight from the
+  Storage pane): finds regenerable build folders across your projects —
+  node_modules, Python venvs, Rust target, CocoaPods, .next/.turbo caches,
+  Xcode DerivedData — with per-project sizes and a total-reclaimable count
+- **The one place bgviewer deletes** — because these folders rebuild on the
+  next install. Every candidate must pass a guard (node_modules only counts
+  with a package.json beside it; .venv only with pyvenv.cfg inside; target
+  only with Cargo.toml), the guard is re-checked at delete time, and the
+  delete button is two-step. A folder merely *named* node_modules is refused.
+- Nested junk pruned (no node_modules-inside-node_modules noise); .git,
+  Library and Trash never scanned
+- Suggested by a user note — thank you!
+
 ## 1.6.0 — 2026-07-17
 
 - **Disk Map**: a full resizable window (from the Storage pane) with a

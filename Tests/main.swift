@@ -403,6 +403,52 @@ func testDiskMap() {
     check("directorySize sums the tree", DiskMap.directorySize(tmp.path) >= 2048)
 }
 
+// ───────────────────────── Unit: dev junk ─────────────────────────
+
+func testDevJunk() {
+    print("\n• Unit — dev junk (guarded discovery + delete)")
+    let fm = FileManager.default
+    let tmp = fm.temporaryDirectory.appendingPathComponent("bgviewer-junk-test-\(ProcessInfo.processInfo.processIdentifier)")
+    defer { try? fm.removeItem(at: tmp) }
+
+    func mk(_ rel: String) { try? fm.createDirectory(at: tmp.appendingPathComponent(rel), withIntermediateDirectories: true) }
+    func touch(_ rel: String, bytes: Int = 100) { fm.createFile(atPath: tmp.appendingPathComponent(rel).path, contents: Data(count: bytes)) }
+
+    // Real node project — qualifies.
+    mk("webapp/node_modules/lodash"); touch("webapp/package.json"); touch("webapp/node_modules/lodash/index.js", bytes: 2000)
+    // Folder just NAMED node_modules, no package.json — must be refused.
+    mk("impostor/node_modules"); touch("impostor/node_modules/file")
+    // Real venv (pyvenv.cfg inside).
+    mk("api/.venv/lib"); touch("api/.venv/pyvenv.cfg")
+    // Plain folder named venv, no pyvenv.cfg — refused.
+    mk("notpython/venv")
+    // Rust target with Cargo.toml — qualifies.
+    mk("cli/target/debug"); touch("cli/Cargo.toml")
+    // "target" without Cargo.toml — refused.
+    mk("random/target")
+    // Nested node_modules inside node_modules — pruned, never listed.
+    mk("webapp/node_modules/dep/node_modules"); touch("webapp/node_modules/dep/package.json")
+    // Junk inside .git — pruned.
+    mk("repo/.git/node_modules"); touch("repo/.git/package.json")
+
+    let found = DevJunk.discover(under: [tmp])
+    let names = Set(found.map { "\($0.project)/\($0.url.lastPathComponent)" })
+    check("finds the three real artifacts", names == ["webapp/node_modules", "api/.venv", "cli/target"])
+    check("kinds labeled", found.first { $0.project == "cli" }?.kind == "Rust target")
+    check("regenerate hints present", found.allSatisfy { !$0.regenerate.isEmpty })
+
+    check("validates: refuses unguarded node_modules", DevJunk.validates(tmp.appendingPathComponent("impostor/node_modules")) == nil)
+    check("validates: refuses venv without pyvenv.cfg", DevJunk.validates(tmp.appendingPathComponent("notpython/venv")) == nil)
+    check("validates: refuses arbitrary dir", DevJunk.validates(tmp.appendingPathComponent("webapp")) == nil)
+
+    // Delete: the guarded one goes; the impostor is refused and survives.
+    check("delete: real junk removed", DevJunk.delete(tmp.appendingPathComponent("webapp/node_modules")) == nil
+          && !fm.fileExists(atPath: tmp.appendingPathComponent("webapp/node_modules").path))
+    let refuse = DevJunk.delete(tmp.appendingPathComponent("impostor/node_modules"))
+    check("delete: impostor refused with reason", refuse != nil && fm.fileExists(atPath: tmp.appendingPathComponent("impostor/node_modules").path))
+    check("delete: project files untouched", fm.fileExists(atPath: tmp.appendingPathComponent("webapp/package.json").path))
+}
+
 // ─────────────── Integration: STOP really stops ───────────────
 
 func testProcessStop() {
@@ -581,6 +627,7 @@ testListenerDiff()
 testTrashEligibility()
 testDiskScanner()
 testDiskMap()
+testDevJunk()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
 } else {
