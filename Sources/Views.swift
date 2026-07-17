@@ -247,16 +247,9 @@ struct DiskPanel: View {
                     Text("over 100 MB in Downloads · Desktop · Documents · Movies")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                     HStack(spacing: 6) {
-                        Chip(label: "Disk map", system: "chart.pie") {
-                            UserDefaults.standard.set("map", forKey: "diskmapMode")
-                            openWindow(id: "diskmap")
-                            NSApp.activate(ignoringOtherApps: true)
-                        }
-                        Chip(label: "Dev junk", system: "shippingbox") {
-                            UserDefaults.standard.set("junk", forKey: "diskmapMode")
-                            openWindow(id: "diskmap")
-                            NSApp.activate(ignoringOtherApps: true)
-                        }
+                        Chip(label: "Disk map", system: "chart.pie") { openDiskMap("map") }
+                        Chip(label: "Dev junk", system: "shippingbox") { openDiskMap("junk") }
+                        Chip(label: "App caches", system: "archivebox") { openDiskMap("caches") }
                     }
                 }
                 Spacer()
@@ -293,6 +286,12 @@ struct DiskPanel: View {
             .padding(.vertical, 7)
         }
         .onAppear { store.refreshDisk() }
+    }
+
+    private func openDiskMap(_ mode: String) {
+        UserDefaults.standard.set(mode, forKey: "diskmapMode")
+        openWindow(id: "diskmap")
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     /// The free-space bar, top-right of the pane.
@@ -510,8 +509,8 @@ struct InfoPanel: View {
                         text: "Turn on alerts in Settings (the ⚙ up top) to get a notification whenever a new dev server starts listening — even while this window is closed.")
                 InfoRow(icon: "internaldrive", color: .secondaryInfo, title: "Storage pane",
                         text: "The drive button lists the biggest files sitting in Downloads, Desktop, Documents and Movies, plus how much disk you have left. It only reveals files in Finder — deleting is always your call.")
-                InfoRow(icon: "chart.pie", color: .secondaryInfo, title: "Disk map & dev junk",
-                        text: "From the Storage pane, open a full window with a clickable pie of what's eating your disk — plus a Dev Junk view of regenerable build folders (node_modules, .venv, Rust target…). That view is the one place bgviewer can delete, guard-checked and behind a confirm, because those folders rebuild on the next install.")
+                InfoRow(icon: "chart.pie", color: .secondaryInfo, title: "Disk map, dev junk & caches",
+                        text: "From the Storage pane, open a full window with three tabs: a clickable pie of what's eating your disk; Dev Junk (node_modules, venvs, Rust target…); and App Caches (Adobe, Xcode, npm/pip, and any big ~/Library/Caches folder). The last two are the only places bgviewer deletes — guard-checked, two-step confirmed, because they rebuild on the next install or launch.")
 
                 HStack(spacing: 8) {
                     Chip(label: "GitHub — docs & issues", system: "arrow.up.right.square") {

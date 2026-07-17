@@ -136,8 +136,9 @@ final class DevJunkModel: ObservableObject {
         let roots = roots
         let cachesHome = cachesHome
         task = Task.detached(priority: .userInitiated) { [weak self] in
-            var found = DevJunk.discover(under: roots)
-            if let cachesHome { found += DevJunk.discoverCaches(home: cachesHome) }
+            var discovered = DevJunk.discover(under: roots)
+            if let cachesHome { discovered += DevJunk.discoverCaches(home: cachesHome) }
+            let found = discovered   // immutable snapshot for the concurrent capture
             await MainActor.run { [weak self] in self?.items = found }
             let pending = found.map { $0.url.path }
             await withTaskGroup(of: (String, Int64)?.self) { group in
@@ -195,11 +196,16 @@ struct DiskMapView: View {
     @AppStorage("diskmapMode") private var mode = "map"
     @StateObject private var model: DiskMapModel
     @StateObject private var junk: DevJunkModel
+    @StateObject private var caches: DevJunkModel
     @State private var hovered: Int?
 
-    init(model: DiskMapModel? = nil, junkModel: DevJunkModel? = nil) {
+    init(model: DiskMapModel? = nil, junkModel: DevJunkModel? = nil, cacheModel: DevJunkModel? = nil) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
         _model = StateObject(wrappedValue: model ?? DiskMapModel())
-        _junk = StateObject(wrappedValue: junkModel ?? DevJunkModel())
+        // Two single-purpose scanners: build artifacts and app caches are now
+        // separate tabs, each with its own list.
+        _junk = StateObject(wrappedValue: junkModel ?? DevJunkModel(roots: [home], cachesHome: nil))
+        _caches = StateObject(wrappedValue: cacheModel ?? DevJunkModel(roots: [], cachesHome: home))
     }
 
     static let palette: [Color] = [.blue, .cyan, .teal, .green, .yellow, .orange,
@@ -217,7 +223,9 @@ struct DiskMapView: View {
             toolbar
             Divider()
             if mode == "junk" {
-                DevJunkList(model: junk)
+                RegenList(model: junk, flavor: .build)
+            } else if mode == "caches" {
+                RegenList(model: caches, flavor: .cache)
             } else {
                 mapContent
             }
@@ -266,19 +274,21 @@ struct DiskMapView: View {
             Picker("", selection: $mode) {
                 Text("Folder map").tag("map")
                 Text("Dev junk").tag("junk")
+                Text("App caches").tag("caches")
             }
             .pickerStyle(.segmented)
-            .frame(width: 190)
+            .frame(width: 300)
             .labelsHidden()
 
-            if mode == "junk" {
-                if junk.scanning { ProgressView().controlSize(.small).scaleEffect(0.7) }
+            if mode == "junk" || mode == "caches" {
+                let active = mode == "junk" ? junk : caches
+                if active.scanning { ProgressView().controlSize(.small).scaleEffect(0.7) }
                 Spacer()
-                if junk.freedBytes > 0 {
-                    Text("freed \(DiskScanner.humanSize(junk.freedBytes)) 🎉")
+                if active.freedBytes > 0 {
+                    Text("freed \(DiskScanner.humanSize(active.freedBytes)) 🎉")
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(.green)
                 }
-                Chip(label: "Rescan", system: "arrow.clockwise") { junk.scan() }
+                Chip(label: "Rescan", system: "arrow.clockwise") { active.scan() }
             } else {
                 ForEach(Array(model.stack.enumerated()), id: \.offset) { i, url in
                     if i > 0 {
@@ -302,9 +312,11 @@ struct DiskMapView: View {
         .padding(.vertical, 9)
         .onChange(of: mode) { m in
             if m == "junk" { junk.scanIfNeeded() }
+            if m == "caches" { caches.scanIfNeeded() }
         }
         .onAppear {
             if mode == "junk" { junk.scanIfNeeded() }
+            if mode == "caches" { caches.scanIfNeeded() }
         }
     }
 
@@ -338,29 +350,57 @@ struct DiskMapView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Image(systemName: mode == "junk" ? "arrow.3.trianglepath" : "hand.raised")
+            Image(systemName: mode == "map" ? "hand.raised" : "arrow.3.trianglepath")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
-            Text(mode == "junk"
-                 ? "These folders fully regenerate on the next install/build — deleting frees space immediately. Don't delete the junk of an app that's running right now. Tip: pnpm stores every package once and links it into all projects."
-                 : "Click a wedge or row to drill in · files reveal in Finder · bgviewer never deletes anything here. System-protected folders may be undercounted.")
+            Text(footerText)
                 .font(.system(size: 10)).foregroundStyle(.secondary)
             Spacer()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
     }
+
+    private var footerText: String {
+        switch mode {
+        case "junk":
+            return "These folders fully regenerate on the next install/build — deleting frees space immediately. Don't delete the junk of an app that's running right now. Tip: pnpm stores every package once and links it into all projects."
+        case "caches":
+            return "Caches are rebuilt by their apps on demand — clearing them is safe and frees space now. Quit an app before clearing its cache. macOS's own caches are never listed."
+        default:
+            return "Click a wedge or row to drill in · files reveal in Finder · bgviewer never deletes anything here. System-protected folders may be undercounted."
+        }
+    }
 }
 
-// MARK: - Dev junk list
+// MARK: - Regenerable-junk list (Dev junk & App caches share the plumbing)
 
-struct DevJunkList: View {
+enum RegenFlavor {
+    case build, cache
+
+    var noun: String { self == .build ? "build folders" : "app caches" }
+    var emptyIcon: String { "sparkles" }
+    var emptyText: String {
+        self == .build
+            ? "No regenerable build junk found — clean machine!"
+            : "No app caches over 100 MB — nothing to reclaim here."
+    }
+    /// A prominent one-line warning shown above the caches list.
+    var banner: String? {
+        self == .cache
+            ? "Quit an app before clearing its cache — it rebuilds automatically the next time it runs. macOS's own caches are never listed."
+            : nil
+    }
+}
+
+struct RegenList: View {
     @ObservedObject var model: DevJunkModel
+    let flavor: RegenFlavor
     @State private var confirmingId: String?
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text("\(model.items.count) regenerable build folders")
+                Text("\(model.items.count) \(flavor.noun)")
                     .font(.system(size: 12, weight: .semibold))
                 Text("· \(DiskScanner.humanSize(model.totalBytes)) reclaimable")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
@@ -373,28 +413,38 @@ struct DevJunkList: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
+
+            if let banner = flavor.banner {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11)).foregroundStyle(.orange)
+                    Text(banner)
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.vertical, 7)
+                .background(Color.orange.opacity(0.08))
+            }
+
             Divider()
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if model.items.isEmpty && !model.scanning {
                         VStack(spacing: 6) {
-                            Image(systemName: "sparkles")
+                            Image(systemName: flavor.emptyIcon)
                                 .font(.system(size: 26)).foregroundStyle(.secondary)
-                            Text("No regenerable junk found — clean machine!")
+                            Text(flavor.emptyText)
                                 .font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                     }
-                    let builds = model.items.filter { $0.category == "build" }
-                    let caches = model.items.filter { $0.category == "cache" }
-                    if !builds.isEmpty {
-                        junkHeader("BUILD ARTIFACTS", note: "regenerate on the next install/build")
-                        ForEach(builds) { item in junkRow(item) }
-                    }
-                    if !caches.isEmpty {
-                        junkHeader("APP CACHES", note: "apps rebuild these — quit the app before clearing its cache")
-                        ForEach(caches) { item in junkRow(item) }
+                    ForEach(model.items) { item in
+                        JunkRow(item: item,
+                                confirming: confirmingId == item.id,
+                                onReveal: { NSWorkspace.shared.activateFileViewerSelecting([item.url]) },
+                                onDelete: { handleDelete(item) })
+                        Divider().padding(.leading, 40)
                     }
                 }
                 .padding(.vertical, 4)
@@ -402,37 +452,19 @@ struct DevJunkList: View {
         }
     }
 
-    private func junkHeader(_ title: String, note: String) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
-            Text(note)
-                .font(.system(size: 10)).foregroundStyle(.tertiary)
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 10).padding(.bottom, 4)
-    }
-
-    private func junkRow(_ item: JunkDir) -> some View {
-        VStack(spacing: 0) {
-            JunkRow(item: item,
-                    confirming: confirmingId == item.id,
-                    onReveal: { NSWorkspace.shared.activateFileViewerSelecting([item.url]) },
-                    onDelete: {
-                if confirmingId == item.id {
-                    confirmingId = nil
-                    model.delete(item)
-                } else {
-                    confirmingId = item.id
-                    let id = item.id
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 4_000_000_000)
-                        if confirmingId == id { confirmingId = nil }
-                    }
-                }
-            })
-            Divider().padding(.leading, 40)
+    /// First tap arms the row (button turns into "Delete <size>?"); second tap
+    /// within 4 s actually deletes. The guard is re-checked in DevJunk.delete.
+    private func handleDelete(_ item: JunkDir) {
+        if confirmingId == item.id {
+            confirmingId = nil
+            model.delete(item)
+        } else {
+            confirmingId = item.id
+            let id = item.id
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if confirmingId == id { confirmingId = nil }
+            }
         }
     }
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.1 — 2026-07-18
+
+- **App Caches is now its own tab** in the Disk Map window, next to Dev Junk —
+  no longer a section buried below build artifacts. Three tabs: Folder map ·
+  Dev junk · App caches, each biggest-first with its own list
+- The Storage pane gains a direct **App caches** shortcut chip
+- App Caches gets a dedicated UI: a prominent "quit the app before clearing
+  its cache" banner and a caches-specific empty state
+- Same guard-checked, two-step delete; `com.apple.*` still never listed
+
 ## 1.9.0 — 2026-07-18
 
 - **App caches in Dev Junk**: a new APP CACHES group finds the classic

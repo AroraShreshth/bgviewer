@@ -209,8 +209,8 @@ final class ServiceStore: ObservableObject {
         updating = true
         let bundlePath = Bundle.main.bundlePath
         Task.detached { [weak self] in
-            let err = await Updater.performUpdate(info, bundlePath: bundlePath) { msg in
-                Task { @MainActor [weak self] in self?.updateStatus = msg }
+            let err = await Updater.performUpdate(info, bundlePath: bundlePath) { [weak self] msg in
+                Task { @MainActor in self?.updateStatus = msg }
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
