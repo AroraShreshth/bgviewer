@@ -3,399 +3,325 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bgviewer — see everything running behind your Mac. Stop it for good.</title>
-<meta name="description" content="A free, open-source macOS menu-bar app that finds every background service, stray dev server, resource hog and disk-eating folder — and can actually make them stay stopped.">
-<meta name="theme-color" content="#0b0d12">
-<link rel="icon" type="image/png" href="icon.png">
-<meta property="og:title" content="bgviewer — the menu-bar kill-switch for macOS background services">
-<meta property="og:description" content="See every launch agent, dev server and resource hog behind your Mac — stop, pause, disable, reclaim disk. Free, open source, no telemetry.">
+<title>bgviewer(1) — menu-bar kill-switch for macOS background services</title>
+<meta name="description" content="Free open-source macOS menu-bar kill-switch for background services. Stops things at the launchd level so they stay stopped.">
+<meta property="og:title" content="bgviewer — kill it. it stays killed.">
+<meta property="og:description" content="Free open-source macOS menu-bar kill-switch for background services. Stops things at the launchd level so they stay stopped.">
 <meta property="og:url" content="https://bgviewer.shreshtharora.com">
 <meta property="og:image" content="https://bgviewer.shreshtharora.com/icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<meta name="theme-color" content="#FAF7F1">
 <style>
-:root{
-  --bg:#0b0d12; --bg2:#0e1118; --panel:#12151d; --panel2:#161a24;
-  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
-  --txt:#e8ecf4; --dim:#9aa3b5; --faint:#5d6575;
-  --blue:#4da3ff; --cyan:#38e1c6; --green:#34d17b; --orange:#ffa14e;
-  --red:#ff5d5d; --purple:#b07aff; --yellow:#ffd35a;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;overflow-x:hidden}
-::selection{background:rgba(77,163,255,.35)}
-a{color:var(--blue);text-decoration:none}
-.wrap{max-width:1120px;margin:0 auto;padding:0 28px}
-.mono{font-family:"SF Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
-
-/* nav */
-nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);background:rgba(11,13,18,.72);border-bottom:1px solid var(--line)}
-nav .wrap{display:flex;align-items:center;gap:26px;height:60px}
-nav .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;color:var(--txt)}
-nav .brand img{width:26px;height:26px}
-nav .links{display:flex;gap:22px;margin-left:auto;font-size:13.5px}
-nav .links a{color:var(--dim);transition:color .15s}
-nav .links a:hover{color:var(--txt)}
-nav .gh{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);padding:7px 13px;border-radius:9px;color:var(--txt)!important;font-weight:600;transition:border-color .15s,background .15s}
-nav .gh:hover{border-color:var(--blue);background:rgba(77,163,255,.08)}
-
-/* hero */
-.hero{position:relative;padding:92px 0 70px}
-.hero::before{content:"";position:absolute;inset:-200px 0 0 0;background:
- radial-gradient(700px 420px at 22% 8%,rgba(77,163,255,.16),transparent 65%),
- radial-gradient(600px 400px at 82% 20%,rgba(56,225,198,.10),transparent 65%);pointer-events:none}
-.hero .wrap{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
-.badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--cyan);border:1px solid rgba(56,225,198,.3);background:rgba(56,225,198,.07);padding:5px 12px;border-radius:99px;margin-bottom:22px}
-h1{font-size:clamp(34px,4.6vw,54px);line-height:1.08;font-weight:800;letter-spacing:-.02em}
-h1 .grad{background:linear-gradient(92deg,var(--blue),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero p.sub{margin:20px 0 30px;font-size:17px;color:var(--dim);max-width:520px}
-.hero p.sub b{color:var(--txt);font-weight:600}
-.cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-.btn{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:14.5px;padding:13px 22px;border-radius:12px;transition:transform .15s,box-shadow .15s,background .15s;cursor:pointer;border:0}
-.btn.primary{background:linear-gradient(92deg,#3d8ef0,#31c9b0);color:#04121f;box-shadow:0 8px 28px rgba(61,142,240,.35)}
-.btn.primary:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(61,142,240,.45)}
-.btn.ghost{background:var(--panel);border:1px solid var(--line2);color:var(--txt)}
-.btn.ghost:hover{border-color:var(--blue)}
-.hero .meta{margin-top:16px;font-size:12.5px;color:var(--faint)}
-.termline{margin-top:26px;display:flex;align-items:center;gap:10px;background:#0a0c11;border:1px solid var(--line2);border-radius:12px;padding:13px 16px;max-width:560px}
-.termline .dollar{color:var(--cyan);font-weight:700}
-.termline code{flex:1;font-size:12.6px;color:#cfe0ff;white-space:nowrap;overflow-x:auto;scrollbar-width:none}
-.termline code::-webkit-scrollbar{display:none}
-.copybtn{flex:none;font-size:11.5px;font-weight:700;color:var(--dim);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 11px;cursor:pointer;transition:all .15s}
-.copybtn:hover{color:var(--txt);border-color:var(--blue)}
-.copybtn.ok{color:#04121f;background:var(--green);border-color:var(--green)}
-
-/* mock dropdown */
-.mock{position:relative;filter:drop-shadow(0 40px 70px rgba(0,0,0,.55))}
-.mock .menubar{display:flex;justify-content:flex-end;align-items:center;gap:14px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:6px 14px;font-size:12px;color:var(--dim)}
-.mock .menubar .gauge{color:var(--blue);font-size:14px}
-.panel{background:#171a22;border:1px solid var(--line2);border-radius:14px;overflow:hidden;font-size:12.5px}
-.panel .phead{display:flex;align-items:center;gap:9px;padding:12px 14px 8px}
-.panel .phead .ic{width:22px;height:22px}
-.panel .phead .t{font-weight:700;font-size:13.5px}
-.panel .phead .s{font-size:10.5px;color:var(--dim)}
-.panel .phead .spacer{margin-left:auto;display:flex;gap:8px;font-size:13px}
-.psearch{margin:4px 12px 10px;background:rgba(255,255,255,.06);border-radius:8px;padding:6px 11px;color:var(--faint);font-size:11.5px}
-.sect{padding:8px 14px 3px;font-size:9.5px;font-weight:800;letter-spacing:.08em;color:var(--faint)}
-.sect b{background:rgba(255,255,255,.09);border-radius:99px;padding:1px 6px;margin-left:5px;color:var(--dim)}
-.row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid rgba(255,255,255,.045)}
-.dot{width:8px;height:8px;border-radius:50%;flex:none}
-.dot.g{background:var(--green);box-shadow:0 0 8px rgba(52,209,123,.7)}
-.dot.b{background:var(--blue)}.dot.gray{background:#5a6170}
-.row .nm{font-weight:600;font-size:12.5px}
-.row .in{font-size:10.5px;color:var(--dim)}
-.acts{margin-left:auto;display:flex;gap:7px;align-items:center}
-.ab{width:22px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:10px}
-.ab.stop{background:rgba(255,93,93,.14);color:var(--red)}
-.ab.pause{background:rgba(255,161,78,.14);color:var(--orange)}
-.ab.re{background:rgba(77,163,255,.14);color:var(--blue)}
-.ab.dis{background:rgba(176,122,255,.14);color:var(--purple)}
-.ab.lock{color:#5a6170;background:transparent}
-.pfoot{display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--line);color:var(--faint);font-size:10.5px}
-.toggle{width:26px;height:15px;background:rgba(255,255,255,.14);border-radius:99px;position:relative}
-.toggle::after{content:"";position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:#fff}
-.toast{position:absolute;right:-14px;top:118px;background:#1d222d;border:1px solid var(--line2);border-radius:12px;padding:10px 14px;font-size:11.5px;box-shadow:0 18px 44px rgba(0,0,0,.5);animation:float 5s ease-in-out infinite}
-.toast b{display:block;font-size:12px}
-.toast span{color:var(--dim)}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-
-/* strip */
-.strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2)}
-.strip .wrap{display:flex;flex-wrap:wrap;gap:10px 34px;justify-content:center;padding:16px 28px;font-size:12.5px;color:var(--dim)}
-.strip b{color:var(--txt)}
-
-/* sections */
-section{padding:84px 0}
-.kicker{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin-bottom:12px}
-h2{font-size:clamp(26px,3.2vw,38px);font-weight:800;letter-spacing:-.015em;line-height:1.15}
-.lead{margin-top:14px;color:var(--dim);font-size:15.5px;max-width:640px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:42px}
-.grid>*,.installgrid>*,.trustgrid>*,.split>*{min-width:0}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;transition:transform .2s,border-color .2s}
-.card:hover{transform:translateY(-4px);border-color:var(--line2)}
-.card .ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:17px;margin-bottom:14px}
-.card h3{font-size:15.5px;font-weight:700;margin-bottom:7px}
-.card p{font-size:13px;color:var(--dim)}
-.card p b{color:var(--txt);font-weight:600}
-.ic.blue{background:rgba(77,163,255,.13)} .ic.green{background:rgba(52,209,123,.13)}
-.ic.orange{background:rgba(255,161,78,.13)} .ic.purple{background:rgba(176,122,255,.13)}
-.ic.cyan{background:rgba(56,225,198,.13)} .ic.red{background:rgba(255,93,93,.13)}
-.ic.yellow{background:rgba(255,211,90,.13)}
-
-/* storage */
-.split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-top:46px}
-.donutwrap{display:flex;gap:26px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:30px}
-.legend{font-size:12.5px;display:grid;gap:9px}
-.legend .li{display:flex;align-items:center;gap:9px;color:var(--dim)}
-.legend .sw{width:10px;height:10px;border-radius:3px}
-.legend b{color:var(--txt);margin-left:auto;padding-left:14px}
-.freedpill{display:inline-flex;align-items:center;gap:8px;background:rgba(52,209,123,.1);border:1px solid rgba(52,209,123,.3);color:var(--green);font-weight:700;font-size:13px;border-radius:99px;padding:8px 16px;margin-top:18px}
-.checks{margin-top:22px;display:grid;gap:11px;font-size:14px}
-.checks li{list-style:none;display:flex;gap:11px;color:var(--dim)}
-.checks li::before{content:"✓";color:var(--green);font-weight:800}
-.checks b{color:var(--txt)}
-
-/* trust */
-#trust{background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.trustgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:38px}
-.trust{display:flex;gap:15px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:19px 21px}
-.trust .em{font-size:19px}
-.trust h4{font-size:14px;margin-bottom:4px}
-.trust p{font-size:12.7px;color:var(--dim)}
-
-/* install */
-.installgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
-.inst{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
-.inst h3{font-size:14.5px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.inst .tag{font-size:10px;font-weight:800;letter-spacing:.05em;padding:3px 8px;border-radius:99px;background:rgba(56,225,198,.12);color:var(--cyan)}
-.codeblock{position:relative;background:#0a0c11;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-size:11.6px;color:#cfe0ff;overflow-x:auto;white-space:pre;margin-bottom:9px}
-.codeblock .copybtn{position:absolute;top:8px;right:8px}
-.inst p{font-size:12.3px;color:var(--dim)}
-.note{margin-top:28px;font-size:12.8px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:10px;padding:14px 18px;max-width:760px}
-
-/* faq */
-.faq{margin-top:36px;display:grid;gap:10px;max-width:820px}
-details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
-details summary{cursor:pointer;font-weight:600;font-size:14.5px;list-style:none;display:flex;align-items:center}
-details summary::after{content:"+";margin-left:auto;color:var(--faint);font-size:18px;transition:transform .2s}
-details[open] summary::after{transform:rotate(45deg)}
-details p{margin-top:10px;font-size:13.5px;color:var(--dim)}
-details code{background:rgba(255,255,255,.07);border-radius:5px;padding:1.5px 6px;font-size:12px}
-
-/* footer */
-footer{border-top:1px solid var(--line);padding:40px 0 48px;background:var(--bg2)}
-footer .wrap{display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:13px;color:var(--faint)}
-footer .brand{display:flex;align-items:center;gap:9px;color:var(--dim);font-weight:600}
-footer .brand img{width:20px;height:20px}
-footer .right{margin-left:auto;display:flex;gap:20px}
-footer a{color:var(--dim)} footer a:hover{color:var(--txt)}
-
-/* reveal */
-.rv{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
-.rv.on{opacity:1;transform:none}
-
-@media(max-width:920px){
-  .hero .wrap{grid-template-columns:1fr;gap:44px}
-  .grid,.installgrid{grid-template-columns:1fr 1fr}
-  .split{grid-template-columns:1fr}
-  .trustgrid{grid-template-columns:1fr}
-}
-@media(max-width:600px){
-  .grid,.installgrid{grid-template-columns:1fr}
-  nav .links a:not(.gh){display:none}
-  .donutwrap{flex-direction:column}
-  .toast{display:none}
-}
+  html, body { margin: 0; padding: 0; background: #FAF7F1; color: #17150F; font-family: "Helvetica Neue", Helvetica, system-ui, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #17150F; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:hover { color: #C43D00; }
+  ::selection { background: #C43D00; color: #FAF7F1; }
+  .copybtn:hover { color: #C43D00 !important; }
 </style>
 </head>
 <body>
 
-<nav>
-  <div class="wrap">
-    <a class="brand" href="#"><img src="icon.png" alt="">bgviewer</a>
-    <div class="links">
-      <a href="#features">Features</a>
-      <a href="#storage">Storage</a>
-      <a href="#trust">Trust</a>
-      <a href="#install">Install</a>
-      <a class="gh" href="https://github.com/AroraShreshth/bgviewer">★ GitHub</a>
-    </div>
-  </div>
-</nav>
+<div style="min-height:100vh; overflow-x:hidden;">
 
-<header class="hero">
-  <div class="wrap">
-    <div>
-      <div class="badge">● Free &amp; open source · <span data-version>v1.8.0</span></div>
-      <h1>See everything running behind your Mac.<br><span class="grad">Stop it for good.</span></h1>
-      <p class="sub">You kill a stray dev server — two seconds later it's back, because launchd resurrects it. bgviewer lives in your menu bar, finds <b>every launch agent, forgotten server, resource hog and disk-eating folder</b>, and stops them at the source.</p>
-      <div class="cta">
-        <a class="btn primary" id="dlbtn" href="https://github.com/AroraShreshth/bgviewer/releases/latest">⬇ Download for macOS</a>
-        <a class="btn ghost" href="https://github.com/AroraShreshth/bgviewer">View source</a>
-      </div>
-      <div class="termline">
-        <span class="dollar mono">$</span>
-        <code class="mono" id="cmd">curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash</code>
-        <button class="copybtn" data-copy="#cmd">Copy</button>
-      </div>
-      <p class="meta">Universal (Apple Silicon + Intel) · macOS 13+ · MIT · zero dependencies · no telemetry</p>
-    </div>
+  <!-- NAV -->
+  <nav style="position:sticky; top:0; z-index:50; background:#FAF7F1; border-bottom:1px solid #17150F; display:flex; align-items:center; gap:16px; padding:10px 20px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px;">
+    <span style="font-weight:700;">bgviewer(1)</span>
+    <span data-version style="border:1px solid #C9C2B4; padding:1px 8px; border-radius:2px; color:#6B6455;">v1.8.0</span>
+    <span style="flex:1;"></span>
+    <a href="#install" style="text-decoration:none; border-bottom:1px solid #17150F;">install</a>
+    <a href="https://github.com/AroraShreshth/bgviewer" style="text-decoration:none; border-bottom:1px solid #17150F;">GitHub ↗</a>
+  </nav>
 
-    <div class="mock rv">
-      <div class="menubar"><span>Wed 9:41 AM</span><span class="gauge">◔</span></div>
-      <div class="panel">
-        <div class="phead">
-          <img class="ic" src="icon.png" alt="">
-          <div><div class="t">Background Services</div><div class="s">11 running</div></div>
-          <div class="spacer"><span style="color:var(--blue)">⟳</span><span style="color:var(--red)">⏻</span></div>
+  <main style="max-width:920px; margin:0 auto; padding:0 20px 80px;">
+
+    <!-- NAME / hero -->
+    <header style="padding:56px 0 40px; border-bottom:2px solid #17150F;">
+      <div style="display:flex; align-items:center; gap:12px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#6B6455;">
+        <img src="icon.png" alt="" width="22" height="22" style="display:block;" onerror="this.style.display='none'">
+        <span>NAME</span>
+      </div>
+      <h1 style="margin:18px 0 0; font-size:clamp(46px, 9.5vw, 108px); line-height:0.95; letter-spacing:-0.035em; font-weight:700; text-wrap:balance;">Kill it.<br>It stays killed<span style="color:#C43D00;">.</span></h1>
+      <p style="margin:28px 0 0; max-width:56ch; font-size:clamp(17px,2.4vw,20px); line-height:1.5; color:#33301F;">
+        <strong>bgviewer</strong> is a free, open-source menu-bar kill-switch for macOS background services.
+        Activity Monitor shows you the process. bgviewer shows you why it keeps coming back — and stops it at the <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:0.92em;">launchd</span> level, where resurrection is decided.
+      </p>
+    </header>
+
+    <!-- SYNOPSIS -->
+    <section style="padding:36px 0; border-bottom:1px solid #C9C2B4;">
+      <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#6B6455;">SYNOPSIS</div>
+      <div style="margin-top:16px; display:flex; align-items:stretch; border:1.5px solid #17150F; background:#17150F;">
+        <code style="flex:1; display:block; padding:16px 18px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(12px,2.2vw,15px); color:#FAF7F1; overflow-x:auto; white-space:pre;">curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash</code>
+        <button class="copybtn" data-copy style="flex-shrink:0; border:none; border-left:1px solid #4a463a; background:#17150F; color:#FAF7F1; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; padding:0 16px; cursor:pointer;">copy</button>
+      </div>
+      <p style="margin:12px 0 0; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#6B6455;">~700 KB · universal binary · macOS 13+ · zero dependencies · MIT</p>
+    </section>
+
+    <!-- DESCRIPTION: the death loop -->
+    <section style="padding:48px 0; border-bottom:1px solid #C9C2B4;">
+      <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#6B6455;">DESCRIPTION</div>
+      <h2 style="margin:16px 0 0; font-size:clamp(26px,4.4vw,40px); letter-spacing:-0.02em; line-height:1.1; font-weight:700; max-width:24ch;">Why your kill −9 doesn't work</h2>
+      <p style="margin:18px 0 0; max-width:60ch; line-height:1.55; color:#33301F;">When you kill a stray process on macOS, <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:0.92em;">launchd</span> often resurrects it instantly — a plist flag called <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:0.92em;">KeepAlive</span>. You are not fighting the process. You are fighting its supervisor.</p>
+
+      <div style="margin-top:32px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(12px,2vw,14px); line-height:1.7;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:14px 0; border-top:1px solid #C9C2B4;">
+          <span style="color:#6B6455;">without:</span>
+          <span>$ kill -9 4021</span>
+          <span style="color:#C43D00;">→</span>
+          <span>launchd: KeepAlive=true</span>
+          <span style="color:#C43D00;">→</span>
+          <span>respawned, pid 4022</span>
+          <span style="color:#C43D00;">→</span>
+          <span>pid 4023</span>
+          <span style="color:#C43D00;">→ ⟲ forever</span>
         </div>
-        <div class="psearch">🔍 Filter by name, port, command…</div>
-        <div class="sect">AUTO-START AGENTS <b>2</b></div>
-        <div class="row"><span class="dot g"></span><div><div class="nm">com.acme.sync-helper</div><div class="in">pid 512 · ↻ auto-restart</div></div>
-          <div class="acts"><span class="ab stop">■</span><span class="ab pause">❚❚</span><span class="ab re">⟳</span><span class="ab dis">⃠</span></div></div>
-        <div class="sect">LISTENING PROCESSES <b>4</b></div>
-        <div class="row"><span class="dot g"></span><div><div class="nm">vite</div><div class="in">port 5173 · dev server</div></div>
-          <div class="acts"><span class="ab stop">■</span><span class="ab pause">❚❚</span><span class="ab re">⟳</span></div></div>
-        <div class="row"><span class="dot g"></span><div><div class="nm">api.py</div><div class="in">port 8000 · pid 8460 · dev server</div></div>
-          <div class="acts"><span class="ab stop">■</span><span class="ab pause">❚❚</span><span class="ab re">⟳</span></div></div>
-        <div class="row"><span class="dot g"></span><div><div class="nm">rapportd</div><div class="in">port 49812 · system</div></div>
-          <div class="acts"><span class="ab lock">🔒</span></div></div>
-        <div class="sect">RESOURCE HOGS <b>1</b></div>
-        <div class="row"><span class="dot g"></span><div><div class="nm">Helper (Renderer)</div><div class="in">24% CPU · 1.2 GB · up 3d 2h</div></div>
-          <div class="acts"><span class="ab stop">■</span><span class="ab pause">❚❚</span></div></div>
-        <div class="pfoot"><span class="toggle"></span> Show all <span style="margin-left:auto">v1.8.0 · updated 9:41:07</span></div>
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:14px 0; border-top:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <span style="color:#6B6455;">with:</span>
+          <span>bgviewer → Stop</span>
+          <span style="color:#C43D00;">→</span>
+          <span>launchctl bootout</span>
+          <span style="color:#C43D00;">→</span>
+          <span>verified: gone</span>
+          <span style="color:#C43D00;">→</span>
+          <span style="font-weight:700;">stays gone.</span>
+        </div>
       </div>
-      <div class="toast"><b>New dev server running</b><span>api.py — port 8000 · dev server</span></div>
-    </div>
-  </div>
-</header>
+      <p style="margin:14px 0 0; font-size:14px; color:#6B6455; max-width:60ch;">Stubborn processes get TERM, then KILL. Every action is verified after it runs.</p>
+    </section>
 
-<div class="strip">
-  <div class="wrap">
-    <span><b>↻ KeepAlive-proof</b> stopping</span>
-    <span><b>176</b> automated checks</span>
-    <span><b>0</b> telemetry calls</span>
-    <span><b>1</b> swiftc command to build</span>
-    <span>self-updating since <b>v1.8</b></span>
-  </div>
+    <!-- 01 WHAT IT SEES -->
+    <section style="padding:48px 0; border-bottom:1px solid #C9C2B4;">
+      <div style="display:flex; align-items:baseline; gap:16px;">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#C43D00;">01</span>
+        <h2 style="margin:0; font-size:clamp(26px,4.4vw,40px); letter-spacing:-0.02em; font-weight:700;">What it sees</h2>
+      </div>
+      <p style="margin:14px 0 28px; color:#33301F; max-width:60ch; line-height:1.55;">Six unified sections. Everything running behind your back, in one dropdown.</p>
+      <div style="display:grid; grid-template-columns:1fr; gap:0; border-top:1px solid #C9C2B4;">
+        <div style="display:grid; grid-template-columns:minmax(140px, 240px) 1fr; gap:8px 20px; padding:14px 0; border-bottom:1px solid #E4DFD3; font-size:14px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">~/Library/LaunchAgents</span>
+          <span style="color:#4A4636; line-height:1.5;">Your launch agents — the things you (or an installer) told macOS to keep running.</span>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(140px, 240px) 1fr; gap:8px 20px; padding:14px 0; border-bottom:1px solid #E4DFD3; font-size:14px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">/Library/LaunchAgents</span>
+          <span style="color:#4A4636; line-height:1.5;">Machine-wide vendor agents: Zoom, Logitech, antivirus tools. The usual suspects.</span>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(140px, 240px) 1fr; gap:8px 20px; padding:14px 0; border-bottom:1px solid #E4DFD3; font-size:14px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">brew services</span>
+          <span style="color:#4A4636; line-height:1.5;">Every Homebrew service, with its real state.</span>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(140px, 240px) 1fr; gap:8px 20px; padding:14px 0; border-bottom:1px solid #E4DFD3; font-size:14px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">TCP ports</span>
+          <span style="color:#4A4636; line-height:1.5;">Every process holding a port — the dev server you forgot about at :5173.</span>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(140px, 240px) 1fr; gap:8px 20px; padding:14px 0; border-bottom:1px solid #E4DFD3; font-size:14px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">resource hogs</span>
+          <span style="color:#4A4636; line-height:1.5;">≥15% CPU or ≥1 GB RAM with no port. The helper app quietly burning CPU for three days.</span>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(140px, 240px) 1fr; gap:8px 20px; padding:14px 0; border-bottom:1px solid #E4DFD3; font-size:14px;">
+          <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">cron</span>
+          <span style="color:#4A4636; line-height:1.5;">Your cron jobs. Read-only — bgviewer looks, doesn't touch.</span>
+        </div>
+      </div>
+      <p style="margin:20px 0 0; font-size:14px; color:#6B6455; max-width:62ch; line-height:1.55;">Plus: opt-in notification the moment a <em>new</em> dev server starts listening — even while the dropdown is closed. Search by name, port, or command. Click any row for the full command line, plist, logs, and a one-click <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:0.92em;">localhost:port</span>. Auto-refreshes live.</p>
+    </section>
+
+    <!-- 02 ACTIONS -->
+    <section style="padding:48px 0; border-bottom:1px solid #C9C2B4;">
+      <div style="display:flex; align-items:baseline; gap:16px;">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#C43D00;">02</span>
+        <h2 style="margin:0; font-size:clamp(26px,4.4vw,40px); letter-spacing:-0.02em; font-weight:700;">The actions</h2>
+      </div>
+      <div style="margin-top:28px; overflow-x:auto;">
+        <table style="width:100%; min-width:560px; border-collapse:collapse; font-size:14px;">
+          <thead>
+            <tr style="text-align:left;">
+              <th style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:0.14em; color:#6B6455; font-weight:400; padding:0 16px 10px 0; border-bottom:1.5px solid #17150F;">BUTTON</th>
+              <th style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:0.14em; color:#6B6455; font-weight:400; padding:0 16px 10px 0; border-bottom:1.5px solid #17150F;">WHAT IT DOES</th>
+              <th style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:11px; letter-spacing:0.14em; color:#6B6455; font-weight:400; padding:0 0 10px 0; border-bottom:1.5px solid #17150F;">DOES IT COME BACK?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700; padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; white-space:nowrap;">Stop</td>
+              <td style="padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; color:#33301F; line-height:1.5;">launchctl bootout — defeats KeepAlive. Stubborn processes get TERM, then KILL. Verified after it runs.</td>
+              <td style="padding:12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; line-height:1.5;">no.</td>
+            </tr>
+            <tr>
+              <td style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700; padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; white-space:nowrap;">Pause / Resume</td>
+              <td style="padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; color:#33301F; line-height:1.5;">Freeze the process without quitting it. Thaw when you want it back.</td>
+              <td style="padding:12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; line-height:1.5;">when you say so.</td>
+            </tr>
+            <tr>
+              <td style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700; padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; white-space:nowrap;">Restart</td>
+              <td style="padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; color:#33301F; line-height:1.5;">Clean stop, clean start.</td>
+              <td style="padding:12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; line-height:1.5;">immediately — that's the point.</td>
+            </tr>
+            <tr>
+              <td style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700; padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; white-space:nowrap;">Disable</td>
+              <td style="padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; color:#33301F; line-height:1.5;">Stops it now AND blocks auto-start forever. The plist is parked, never deleted.</td>
+              <td style="padding:12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; line-height:1.5;">restored with one click.</td>
+            </tr>
+            <tr>
+              <td style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700; padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; white-space:nowrap;">(Apple system)</td>
+              <td style="padding:12px 16px 12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; color:#33301F; line-height:1.5;">Locked. Zero action buttons.</td>
+              <td style="padding:12px 0; border-bottom:1px solid #E4DFD3; vertical-align:top; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; line-height:1.5;">n/a — you can't break your Mac.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin:16px 0 0; font-size:14px; color:#6B6455;">Apple system processes are locked — zero action buttons. You cannot break your Mac from here.</p>
+
+      <!-- dropdown wireframe (synthetic data) -->
+      <div style="margin-top:40px; max-width:480px; border:1.5px solid #17150F; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; background:#FFFDF8;">
+        <div style="display:flex; justify-content:space-between; padding:10px 14px; border-bottom:1px solid #C9C2B4;"><span style="font-weight:700;">● bgviewer</span><span data-version style="color:#6B6455;">v1.8.0</span></div>
+        <div style="padding:8px 14px; border-bottom:1px solid #E4DFD3; color:#9A9382;">search name, port, command…</div>
+        <div style="padding:8px 14px 3px; font-size:10px; letter-spacing:0.16em; color:#6B6455;">LISTENING PORTS</div>
+        <div style="display:flex; gap:10px; padding:5px 14px; align-items:baseline;"><span style="font-weight:700;">vite</span><span style="color:#C43D00;">:5173</span><span style="color:#6B6455; flex:1;">dev server</span><span style="color:#6B6455;">stop · pause</span></div>
+        <div style="display:flex; gap:10px; padding:5px 14px; align-items:baseline;"><span style="font-weight:700;">api.py</span><span style="color:#C43D00;">:8000</span><span style="color:#6B6455; flex:1;">dev server</span><span style="color:#6B6455;">stop · pause</span></div>
+        <div style="display:flex; gap:10px; padding:5px 14px; align-items:baseline;"><span style="font-weight:700;">postgres</span><span style="color:#C43D00;">:5432</span><span style="color:#6B6455; flex:1;">brew service</span><span style="color:#6B6455;">stop · pause</span></div>
+        <div style="padding:10px 14px 3px; font-size:10px; letter-spacing:0.16em; color:#6B6455; border-top:1px solid #E4DFD3; margin-top:5px;">LAUNCH AGENTS</div>
+        <div style="display:flex; gap:10px; padding:5px 14px; align-items:baseline;"><span style="font-weight:700;">com.acme.sync-helper</span><span style="color:#6B6455; flex:1;">running</span><span style="color:#6B6455;">stop · disable</span></div>
+        <div style="display:flex; gap:10px; padding:5px 14px; align-items:baseline;"><span style="font-weight:700;">us.zoom.ZoomDaemon</span><span style="color:#6B6455; flex:1;">running</span><span style="color:#6B6455;">stop · disable</span></div>
+        <div style="padding:10px 14px 3px; font-size:10px; letter-spacing:0.16em; color:#6B6455; border-top:1px solid #E4DFD3; margin-top:5px;">RESOURCE HOGS</div>
+        <div style="display:flex; gap:10px; padding:5px 14px 10px; align-items:baseline;"><span style="font-weight:700;">HelperTool</span><span style="color:#6B6455; flex:1;">41% CPU · 2.1 GB · up 3d</span><span style="color:#6B6455;">stop</span></div>
+        <div style="display:flex; justify-content:space-between; padding:8px 14px; border-top:1px solid #C9C2B4; color:#9A9382;"><span>APPLE SYSTEM (locked)</span><span>cron (read-only)</span></div>
+      </div>
+      <p style="margin:10px 0 0; font-size:12px; font-family:ui-monospace,'SF Mono',Menlo,monospace; color:#9A9382;">↑ typographic recreation, synthetic data. The real thing looks about this boring.</p>
+    </section>
+
+    <!-- 03 STORAGE -->
+    <section style="padding:48px 0; border-bottom:1px solid #C9C2B4;">
+      <div style="display:flex; align-items:baseline; gap:16px;">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#C43D00;">03</span>
+        <h2 style="margin:0; font-size:clamp(26px,4.4vw,40px); letter-spacing:-0.02em; font-weight:700;">Storage tools</h2>
+      </div>
+      <div style="margin-top:28px; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0; border-top:1px solid #C9C2B4; border-left:1px solid #C9C2B4;">
+        <div style="padding:20px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">Storage pane</div>
+          <p style="margin:10px 0 0; font-size:14px; line-height:1.55; color:#33301F;">Biggest files in Downloads, Desktop, Documents, Movies — with how long you've ignored them, and a free-space bar.</p>
+        </div>
+        <div style="padding:20px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">Disk Map</div>
+          <p style="margin:10px 0 0; font-size:14px; line-height:1.55; color:#33301F;">A clickable pie chart of any folder. Drill in wedge by wedge until you find the 40 GB surprise.</p>
+        </div>
+        <div style="padding:20px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; font-weight:700;">Dev Junk</div>
+          <p style="margin:10px 0 0; font-size:14px; line-height:1.55; color:#33301F;">Every node_modules, Python venv, Rust target, Pods, DerivedData across your projects, biggest first. The one place the app deletes — these rebuild on the next install.</p>
+        </div>
+      </div>
+      <p style="margin:20px 0 0; max-width:62ch; font-size:15px; line-height:1.55;"><strong>It deletes exactly one category of thing, and only after checking twice.</strong> Dev Junk is guard-checked — <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:0.92em;">node_modules</span> only qualifies with a <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:0.92em;">package.json</span> beside it, guards are re-checked at delete time, two-step confirm. For personal files there is deliberately <em>no delete button anywhere</em> — reveal in Finder only.</p>
+    </section>
+
+    <!-- 04 SPEC SHEET -->
+    <section style="padding:48px 0; border-bottom:1px solid #C9C2B4;">
+      <div style="display:flex; align-items:baseline; gap:16px;">
+        <span style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#C43D00;">04</span>
+        <h2 style="margin:0; font-size:clamp(26px,4.4vw,40px); letter-spacing:-0.02em; font-weight:700;">Spec sheet</h2>
+      </div>
+      <div style="margin-top:28px; display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0; border-top:1px solid #C9C2B4; border-left:1px solid #C9C2B4;">
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">MIT</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">license, whole repo public</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">0</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">telemetry. none.</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">176</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">automated checks, incl. tests against real launchd</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">~700 KB</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">the entire app</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">0 deps</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">builds with one swiftc command</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">2 archs</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">universal binary — Apple Silicon + Intel</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">macOS 13+</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">Ventura and later</div>
+        </div>
+        <div style="padding:16px; border-right:1px solid #C9C2B4; border-bottom:1px solid #C9C2B4;">
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:clamp(18px,3vw,24px); font-weight:700; letter-spacing:-0.02em;">SHA-256</div>
+          <div style="margin-top:6px; font-size:12px; color:#6B6455; line-height:1.45;">checksum + code-signature verified updates, auto rollback</div>
+        </div>
+      </div>
+      <p style="margin:18px 0 0; font-size:14px; color:#6B6455; max-width:62ch; line-height:1.55;">Only network calls: a GitHub release check at most every 6 hours, plus updates you request. Self-updates are verified against SHA-256 checksums <em>and</em> code signature, with automatic rollback. CI installs and launches every build before it can ship.</p>
+    </section>
+
+    <!-- INSTALL -->
+    <section id="install" style="padding:48px 0;">
+      <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; letter-spacing:0.18em; color:#6B6455;">INSTALL</div>
+      <h2 style="margin:16px 0 0; font-size:clamp(26px,4.4vw,40px); letter-spacing:-0.02em; font-weight:700;">Three ways in</h2>
+
+      <div style="margin-top:28px; display:flex; flex-direction:column; gap:24px;">
+        <div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#6B6455; margin-bottom:8px;">1 — one-liner</div>
+          <div style="display:flex; align-items:stretch; border:1.5px solid #17150F;">
+            <code style="flex:1; padding:13px 16px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; overflow-x:auto; white-space:pre;">curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash</code>
+            <button class="copybtn" data-copy style="flex-shrink:0; border:none; border-left:1px solid #C9C2B4; background:#FAF7F1; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; padding:0 14px; cursor:pointer; color:#17150F;">copy</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#6B6455; margin-bottom:8px;">2 — Homebrew</div>
+          <div style="display:flex; align-items:stretch; border:1.5px solid #17150F;">
+            <code style="flex:1; padding:13px 16px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; overflow-x:auto; white-space:pre;">brew tap arorashreshth/bgviewer https://github.com/AroraShreshth/bgviewer
+brew install --cask arorashreshth/bgviewer/bgviewer --no-quarantine</code>
+            <button class="copybtn" data-copy style="flex-shrink:0; border:none; border-left:1px solid #C9C2B4; background:#FAF7F1; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; padding:0 14px; cursor:pointer; color:#17150F;">copy</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#6B6455; margin-bottom:8px;">3 — manual: <a id="dl" href="https://github.com/AroraShreshth/bgviewer/releases/latest">download the zip</a>, drag to /Applications, then</div>
+          <div style="display:flex; align-items:stretch; border:1.5px solid #17150F;">
+            <code style="flex:1; padding:13px 16px; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:13px; overflow-x:auto; white-space:pre;">xattr -d com.apple.quarantine /Applications/bgviewer.app</code>
+            <button class="copybtn" data-copy style="flex-shrink:0; border:none; border-left:1px solid #C9C2B4; background:#FAF7F1; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; padding:0 14px; cursor:pointer; color:#17150F;">copy</button>
+          </div>
+        </div>
+      </div>
+
+      <p style="margin:24px 0 0; padding:12px 16px; border-left:2px solid #C43D00; font-size:13px; line-height:1.55; color:#4A4636; max-width:64ch;"><strong>Honest caveat:</strong> not notarized yet, so macOS asks once — System Settings → Privacy &amp; Security → Open Anyway. The one-liner handles it for you.</p>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer style="border-top:2px solid #17150F; padding:24px 20px; display:flex; flex-wrap:wrap; gap:12px 24px; align-items:baseline; font-family:ui-monospace,'SF Mono',Menlo,monospace; font-size:12px; color:#6B6455; max-width:960px; margin:0 auto;">
+    <span>MIT</span>
+    <span>built by <a href="https://github.com/AroraShreshth">Shreshth Arora</a></span>
+    <span style="flex:1;"></span>
+    <a href="https://github.com/AroraShreshth/bgviewer">GitHub</a>
+    <a href="https://github.com/AroraShreshth/bgviewer/releases">Releases</a>
+    <a href="https://github.com/AroraShreshth/bgviewer/issues">Issues</a>
+  </footer>
 </div>
 
-<section id="features">
-  <div class="wrap">
-    <div class="kicker rv">The kill-switch</div>
-    <h2 class="rv">Sees what Activity Monitor can't.<br>Stops what <code class="mono" style="font-size:.72em;background:rgba(255,255,255,.07);border-radius:8px;padding:2px 10px">kill -9</code> can't.</h2>
-    <p class="lead rv">macOS relaunches KeepAlive agents the instant you kill them. bgviewer unloads them at the launchd level — and can park them so they never come back.</p>
-    <div class="grid">
-      <div class="card rv"><div class="ic red">⏹</div><h3>Stop that sticks</h3><p><code class="mono">launchctl bootout</code> beats KeepAlive — no respawn. Stubborn processes get TERM, then KILL. Every action is <b>verified after it runs</b>.</p></div>
-      <div class="card rv"><div class="ic purple">⃠</div><h3>Disable = parked, not deleted</h3><p>Stops it now <b>and</b> blocks every future auto-start. The plist is parked, never deleted — one click brings it back.</p></div>
-      <div class="card rv"><div class="ic blue">🗂</div><h3>Six sources, one list</h3><p>Your launch agents, <b>machine-wide vendor agents</b>, Homebrew services, port listeners, resource hogs and cron — unified.</p></div>
-      <div class="card rv"><div class="ic orange">🔥</div><h3>Resource hogs</h3><p>The helper app quietly burning <b>25% CPU for three days</b> holds no port — bgviewer finds it anyway.</p></div>
-      <div class="card rv"><div class="ic green">🔔</div><h3>Alerts the moment it starts</h3><p>Opt-in notification when a <b>new dev server starts listening</b> — even with the dropdown closed. Never forget one running again.</p></div>
-      <div class="card rv"><div class="ic cyan">⚡︎</div><h3>Built for engineers</h3><p>Search by name, port or command. Click a row: full command line, plist, logs, one-click <b>localhost:port</b>. Auto-refreshes live.</p></div>
-    </div>
-  </div>
-</section>
-
-<section id="storage">
-  <div class="wrap">
-    <div class="kicker rv">Storage</div>
-    <h2 class="rv">Your disk is full of things you forgot.</h2>
-    <p class="lead rv">Last year's 12 GB installer. Three copies of the same download. A gigabyte of node_modules in every project. bgviewer finds all of it.</p>
-    <div class="split">
-      <div class="donutwrap rv">
-        <svg width="190" height="190" viewBox="0 0 42 42" role="img" aria-label="disk usage donut chart">
-          <circle cx="21" cy="21" r="15.9" fill="none" stroke="#232833" stroke-width="7"/>
-          <circle cx="21" cy="21" r="15.9" fill="none" stroke="#4da3ff" stroke-width="7" stroke-dasharray="34 66" stroke-dashoffset="25"/>
-          <circle cx="21" cy="21" r="15.9" fill="none" stroke="#38e1c6" stroke-width="7" stroke-dasharray="22 78" stroke-dashoffset="-9"/>
-          <circle cx="21" cy="21" r="15.9" fill="none" stroke="#ffd35a" stroke-width="7" stroke-dasharray="18 82" stroke-dashoffset="-31"/>
-          <circle cx="21" cy="21" r="15.9" fill="none" stroke="#ffa14e" stroke-width="7" stroke-dasharray="12 88" stroke-dashoffset="-49"/>
-          <text x="21" y="20.2" text-anchor="middle" font-size="4.4" fill="#e8ecf4" font-weight="700" font-family="-apple-system,sans-serif">Developer</text>
-          <text x="21" y="25.6" text-anchor="middle" font-size="3.1" fill="#9aa3b5" font-family="-apple-system,sans-serif">84.2 GB</text>
-        </svg>
-        <div class="legend">
-          <div class="li"><span class="sw" style="background:#4da3ff"></span> node_modules ×14 <b>28.6 GB</b></div>
-          <div class="li"><span class="sw" style="background:#38e1c6"></span> ml-models <b>18.5 GB</b></div>
-          <div class="li"><span class="sw" style="background:#ffd35a"></span> Xcode DerivedData <b>15.1 GB</b></div>
-          <div class="li"><span class="sw" style="background:#ffa14e"></span> screen-recordings <b>10.1 GB</b></div>
-          <div class="li"><span class="sw" style="background:#5a6170"></span> everything else <b>11.9 GB</b></div>
-          <div class="freedpill">📦 Dev Junk: freed 31.2 GB 🎉</div>
-        </div>
-      </div>
-      <div class="rv">
-        <ul class="checks">
-          <li><b>Storage pane</b> — the biggest files in Downloads, Desktop, Documents &amp; Movies, with how long you've ignored them, and a free-space bar.</li>
-          <li><b>Disk Map</b> — a full window with a clickable pie of any folder. Drill in wedge by wedge, like the expensive apps, for free.</li>
-          <li><b>Dev Junk</b> — finds every node_modules, Python venv, Rust target, Pods and DerivedData across your projects, biggest first. They regenerate on the next install, so this is the one place bgviewer deletes — guard-checked, two-step confirmed.</li>
-          <li><b>Your files are never deleted.</b> Everything else is reveal-in-Finder only. Deleting your data is a decision bgviewer refuses to make for you.</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="trust">
-  <div class="wrap">
-    <div class="kicker rv">Trust</div>
-    <h2 class="rv">A process-killer you can trust,<br>because it's built paranoid.</h2>
-    <div class="trustgrid">
-      <div class="trust rv"><span class="em">🔒</span><div><h4>System processes are untouchable</h4><p>Everything Apple gets a lock icon and zero action buttons. You cannot break your Mac with bgviewer.</p></div></div>
-      <div class="trust rv"><span class="em">↩️</span><div><h4>Everything is reversible</h4><p>Disabled agents are parked, not deleted — restored with one click. Even Dev Junk deletions only touch folders that provably rebuild themselves.</p></div></div>
-      <div class="trust rv"><span class="em">📡</span><div><h4>No telemetry. Ever.</h4><p>Its only network calls are a release check against GitHub (every 6h at most) and the updates you ask for — checksum- and signature-verified, with automatic rollback.</p></div></div>
-      <div class="trust rv"><span class="em">🧪</span><div><h4>Open source &amp; test-gated</h4><p>MIT licensed, 176 automated checks against real launchd, and CI that installs and launches every build before it can ship. Read every line on GitHub.</p></div></div>
-    </div>
-  </div>
-</section>
-
-<section id="install">
-  <div class="wrap">
-    <div class="kicker rv">Install</div>
-    <h2 class="rv">In your menu bar in ten seconds.</h2>
-    <div class="installgrid">
-      <div class="inst rv">
-        <h3>One-liner <span class="tag">RECOMMENDED</span></h3>
-        <div class="codeblock mono" id="c1">curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash<button class="copybtn" data-copy="#c1">Copy</button></div>
-        <p>Downloads the latest release, installs to /Applications, launches. Done.</p>
-      </div>
-      <div class="inst rv">
-        <h3>Homebrew</h3>
-        <div class="codeblock mono" id="c2">brew tap arorashreshth/bgviewer \
-  https://github.com/AroraShreshth/bgviewer
-brew install --cask \
-  arorashreshth/bgviewer/bgviewer --no-quarantine<button class="copybtn" data-copy="#c2">Copy</button></div>
-        <p>Checksum-pinned cask, straight from the repo.</p>
-      </div>
-      <div class="inst rv">
-        <h3>Manual</h3>
-        <p style="margin-bottom:9px">Grab the zip from <a href="https://github.com/AroraShreshth/bgviewer/releases/latest">Releases</a>, drag to /Applications, then:</p>
-        <div class="codeblock mono" id="c3">xattr -d com.apple.quarantine \
-  /Applications/bgviewer.app<button class="copybtn" data-copy="#c3">Copy</button></div>
-        <p>SHA-256 checksums ship with every release.</p>
-      </div>
-    </div>
-    <p class="note"><b>First-launch note:</b> bgviewer isn't notarized yet (it's a free project — Apple's $99/yr comes later), so macOS asks once: approve via <i>System Settings → Privacy &amp; Security → Open Anyway</i>, or use the one-liner, which handles it. After that, the built-in <b>self-updater</b> keeps you current automatically.</p>
-
-    <div class="faq">
-      <details class="rv"><summary>Why does the thing I killed keep coming back?</summary><p>Because launchd is doing its job: agents with <code>KeepAlive</code> are relaunched the moment they die. Killing the process treats the symptom. bgviewer's Stop unloads the agent itself (<code>launchctl bootout</code>) — and Disable blocks it from ever auto-starting again.</p></details>
-      <details class="rv"><summary>Can it break my Mac?</summary><p>No. Apple system processes are locked — shown for visibility, with no action buttons. User agents you disable are parked, never deleted, and restored with one click.</p></details>
-      <details class="rv"><summary>Does it phone home?</summary><p>No telemetry of any kind. The only network access is checking GitHub for new releases (at most every 6 hours) and downloading an update when you — or auto-update, if you turn it on — say so. Updates are SHA-256 and signature verified.</p></details>
-      <details class="rv"><summary>Is deleting Dev Junk safe?</summary><p>A folder only qualifies if it provably belongs to a project — <code>node_modules</code> needs a <code>package.json</code> beside it, <code>.venv</code> needs <code>pyvenv.cfg</code> inside, Rust <code>target</code> needs <code>Cargo.toml</code>. The guard re-runs at delete time and the button is two-step. They all rebuild on the next install.</p></details>
-      <details class="rv"><summary>What does it run on?</summary><p>macOS 13 Ventura or newer, Apple Silicon and Intel (universal binary). It's a ~700 KB app with zero dependencies, built with a single <code>swiftc</code> command.</p></details>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap">
-    <span class="brand"><img src="icon.png" alt="">bgviewer</span>
-    <span>· MIT · built by <a href="https://github.com/AroraShreshth">Shreshth Arora</a></span>
-    <div class="right">
-      <a href="https://github.com/AroraShreshth/bgviewer">GitHub</a>
-      <a href="https://github.com/AroraShreshth/bgviewer/releases">Releases</a>
-      <a href="https://github.com/AroraShreshth/bgviewer/issues">Issues</a>
-    </div>
-  </div>
-</footer>
-
 <script>
-// copy buttons
-document.querySelectorAll(".copybtn").forEach(btn=>{
-  btn.addEventListener("click",()=>{
-    const el=document.querySelector(btn.dataset.copy);
-    const text=el.childNodes[0].textContent.trim();
-    navigator.clipboard.writeText(text).then(()=>{
-      btn.textContent="Copied ✓";btn.classList.add("ok");
-      setTimeout(()=>{btn.textContent="Copy";btn.classList.remove("ok")},1600);
-    });
+// copy buttons — copy the sibling <code>'s text
+document.querySelectorAll("[data-copy]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const code = btn.previousElementSibling;
+    navigator.clipboard.writeText(code.textContent.trim()).catch(() => {});
+    btn.textContent = "copied ✓";
+    setTimeout(() => { btn.textContent = "copy"; }, 1600);
   });
 });
-// reveal on scroll
-const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("on");io.unobserve(e.target)}}),{threshold:.12});
-document.querySelectorAll(".rv").forEach(el=>io.observe(el));
-// live version + direct download link
-fetch("https://api.github.com/repos/AroraShreshth/bgviewer/releases/latest").then(r=>r.json()).then(d=>{
-  if(d.tag_name){document.querySelectorAll("[data-version]").forEach(e=>e.textContent=d.tag_name)}
-  const a=(d.assets||[]).find(x=>x.name&&x.name.endsWith(".zip"));
-  if(a){document.getElementById("dlbtn").href=a.browser_download_url}
-}).catch(()=>{});
+// live version + direct download link, static fallback if the API is unreachable
+fetch("https://api.github.com/repos/AroraShreshth/bgviewer/releases/latest")
+  .then(r => r.ok ? r.json() : null)
+  .then(j => {
+    if (!j || !j.tag_name) return;
+    document.querySelectorAll("[data-version]").forEach(e => { e.textContent = j.tag_name; });
+    const zip = (j.assets || []).find(a => a.name && a.name.endsWith(".zip"));
+    if (zip) document.getElementById("dl").href = zip.browser_download_url;
+  })
+  .catch(() => {});
 </script>
 </body>
 </html>
