@@ -232,6 +232,7 @@ struct RootView: View {
 
 struct DiskPanel: View {
     @EnvironmentObject var store: ServiceStore
+    @Environment(\.openWindow) private var openWindow
 
     private static let relative: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -242,10 +243,14 @@ struct DiskPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Large files").font(.system(size: 13, weight: .semibold))
                     Text("over 100 MB in Downloads · Desktop · Documents · Movies")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
+                    Chip(label: "Open disk map", system: "chart.pie") {
+                        openWindow(id: "diskmap")
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
                 }
                 Spacer()
                 capacity
@@ -496,6 +501,8 @@ struct InfoPanel: View {
                         text: "Turn on alerts in Settings (the ⚙ up top) to get a notification whenever a new dev server starts listening — even while this window is closed.")
                 InfoRow(icon: "internaldrive", color: .secondaryInfo, title: "Storage pane",
                         text: "The drive button lists the biggest files sitting in Downloads, Desktop, Documents and Movies, plus how much disk you have left. It only reveals files in Finder — deleting is always your call.")
+                InfoRow(icon: "chart.pie", color: .secondaryInfo, title: "Disk map",
+                        text: "From the Storage pane, open a full window with a clickable pie of what's eating your disk — drill into folders wedge by wedge.")
 
                 HStack(spacing: 8) {
                     Chip(label: "GitHub — docs & issues", system: "arrow.up.right.square") {

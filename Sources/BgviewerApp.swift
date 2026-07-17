@@ -11,5 +11,10 @@ struct BgviewerApp: App {
             Image(systemName: "gauge.with.dots.needle.bottom.50percent")
         }
         .menuBarExtraStyle(.window)
+
+        Window("bgviewer — Disk Map", id: "diskmap") {
+            DiskMapView()
+        }
+        .defaultSize(width: 940, height: 620)
     }
 }

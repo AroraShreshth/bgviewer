@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.0 — 2026-07-17
+
+- **Disk Map**: a full resizable window (from the Storage pane) with a
+  clickable pie of what's eating your disk — click a wedge or row to drill
+  into folders, breadcrumbs to climb back out, tiny items grouped into an
+  "everything else" wedge. Sizes computed lazily per level (`du`), cached per
+  session, three at a time
+- Scan any folder via a picker; files reveal in Finder; still zero delete
+  buttons anywhere
+- Test suite grown to 150 checks (pie geometry, hit-testing, du parsing,
+  directory listing)
+
 ## 1.5.0 — 2026-07-14
 
 - **Storage pane** (💾 drive button in the header): the biggest files sitting in

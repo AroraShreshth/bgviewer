@@ -350,6 +350,59 @@ func testDiskScanner() {
     check("icon: fallback", DiskScanner.icon(for: "weird.xyz") == "doc")
 }
 
+// ───────────────────────── Unit: disk map ─────────────────────────
+
+func testDiskMap() {
+    print("\n• Unit — disk map (pie geometry + du)")
+
+    check("du parse", DiskMap.parseDuKB("123456\t/Users/x/Library\n") == 123456)
+    check("du parse garbage -> 0", DiskMap.parseDuKB("no numbers here") == 0)
+
+    func entry(_ name: String, _ size: Int64, dir: Bool = true) -> DiskEntry {
+        DiskEntry(url: URL(fileURLWithPath: "/t/\(name)"), name: name, isDir: dir, sizeBytes: size)
+    }
+
+    // 4 entries: 500, 300, 190, 10 (the 10 = 1% -> grouped into "everything else")
+    let s = DiskMap.slices([entry("a", 500), entry("b", 300), entry("c", 190), entry("d", 10, dir: false)])
+    check("slices: big three kept, tiny grouped", s.count == 4 && s.last?.url == nil)
+    check("slices: sorted biggest first", s[0].name == "a" && s[1].name == "b")
+    check("slices: fractions sum to 1", abs(s.reduce(0.0) { $0 + $1.fraction } - 1.0) < 0.0001)
+    check("slices: angles continuous 0→360", s.first!.startDeg == 0 && abs(s.last!.endDeg - 360) < 0.0001
+          && zip(s, s.dropFirst()).allSatisfy { abs($0.endDeg - $1.startDeg) < 0.0001 })
+    check("slices: unsized (-1) and empty ignored", DiskMap.slices([entry("x", -1), entry("y", 0)]).isEmpty)
+
+    let cap = DiskMap.slices((0..<20).map { entry("e\($0)", 1000) }, maxSlices: 5)
+    check("slices: maxSlices respected + other", cap.count == 6 && cap.last?.colorIndex == -1)
+
+    // Angle math: 12 o'clock = 0°, clockwise. Center (100,100).
+    check("angle: top", DiskMap.angleDeg(centerX: 100, centerY: 100, x: 100, y: 40).deg == 0)
+    check("angle: right = 90°", abs(DiskMap.angleDeg(centerX: 100, centerY: 100, x: 160, y: 100).deg - 90) < 0.001)
+    check("angle: bottom = 180°", abs(DiskMap.angleDeg(centerX: 100, centerY: 100, x: 100, y: 160).deg - 180) < 0.001)
+    check("angle: left = 270°", abs(DiskMap.angleDeg(centerX: 100, centerY: 100, x: 40, y: 100).deg - 270) < 0.001)
+    check("angle: radius", abs(DiskMap.angleDeg(centerX: 0, centerY: 0, x: 3, y: 4).radius - 5) < 0.001)
+
+    // Hit-testing: two half-circle slices, outer radius 100, hole 58%.
+    let halves = DiskMap.slices([entry("first", 500), entry("second", 500)])
+    check("hit: 45° lands in first", DiskMap.sliceIndex(atDeg: 45, radius: 80, outerRadius: 100, innerFraction: 0.58, slices: halves) == 0)
+    check("hit: 200° lands in second", DiskMap.sliceIndex(atDeg: 200, radius: 80, outerRadius: 100, innerFraction: 0.58, slices: halves) == 1)
+    check("hit: donut hole misses", DiskMap.sliceIndex(atDeg: 45, radius: 20, outerRadius: 100, innerFraction: 0.58, slices: halves) == nil)
+    check("hit: outside ring misses", DiskMap.sliceIndex(atDeg: 45, radius: 120, outerRadius: 100, innerFraction: 0.58, slices: halves) == nil)
+
+    // listChildren against a real temp tree.
+    let fm = FileManager.default
+    let tmp = fm.temporaryDirectory.appendingPathComponent("bgviewer-map-test-\(ProcessInfo.processInfo.processIdentifier)")
+    try? fm.createDirectory(at: tmp.appendingPathComponent("sub"), withIntermediateDirectories: true)
+    fm.createFile(atPath: tmp.appendingPathComponent("file.bin").path, contents: Data(count: 2048))
+    fm.createFile(atPath: tmp.appendingPathComponent(".hidden").path, contents: Data(count: 512))
+    defer { try? fm.removeItem(at: tmp) }
+    let kids = DiskMap.listChildren(of: tmp)
+    check("listChildren: file sized, dir pending, hidden skipped",
+          kids.count == 2
+          && kids.first { $0.name == "file.bin" }?.sizeBytes == 2048
+          && kids.first { $0.name == "sub" }?.sizeBytes == -1)
+    check("directorySize sums the tree", DiskMap.directorySize(tmp.path) >= 2048)
+}
+
 // ─────────────── Integration: STOP really stops ───────────────
 
 func testProcessStop() {
@@ -527,6 +580,7 @@ testVersionCompare()
 testListenerDiff()
 testTrashEligibility()
 testDiskScanner()
+testDiskMap()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
 } else {
