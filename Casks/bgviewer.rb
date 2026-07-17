@@ -1,6 +1,6 @@
 cask "bgviewer" do
-  version "1.7.0"
-  sha256 "c363c5c0a442c83a8d1999fbebadd6838bd9df5f67ed3aebf66b8465861842c3"
+  version "1.7.1"
+  sha256 "5c653287d4f97358b8c3230ba1a7526914335bb1f0431283296a4bf23e85b3f2"
 
   url "https://github.com/AroraShreshth/bgviewer/releases/download/v#{version}/bgviewer-#{version}.zip"
   name "bgviewer"
