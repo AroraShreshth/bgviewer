@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.1 — 2026-07-17
+
+- Dev Junk stays sorted **biggest-first live** while sizes stream in — the
+  delete-worthy folders are always at the top; entries still being sized sink
+  to the bottom (previously the list only sorted once sizing finished)
+
 ## 1.7.0 — 2026-07-17
 
 - **Dev Junk view** (second tab in the Disk Map window, or straight from the

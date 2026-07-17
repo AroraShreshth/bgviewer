@@ -447,6 +447,13 @@ func testDevJunk() {
     let refuse = DevJunk.delete(tmp.appendingPathComponent("impostor/node_modules"))
     check("delete: impostor refused with reason", refuse != nil && fm.fileExists(atPath: tmp.appendingPathComponent("impostor/node_modules").path))
     check("delete: project files untouched", fm.fileExists(atPath: tmp.appendingPathComponent("webapp/package.json").path))
+
+    func jd(_ name: String, _ size: Int64) -> JunkDir {
+        JunkDir(url: URL(fileURLWithPath: "/\(name)"), kind: "k", regenerate: "r", project: name, sizeBytes: size)
+    }
+    let sorted = DevJunk.bySize([jd("a", 100), jd("b", -1), jd("c", 900), jd("d", 300)])
+    check("bySize: biggest first, live", sorted.map { $0.project } == ["c", "d", "a", "b"])
+    check("bySize: still-sizing entries sink to bottom", sorted.last?.sizeBytes == -1)
 }
 
 // ─────────────── Integration: STOP really stops ───────────────

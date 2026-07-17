@@ -98,6 +98,15 @@ enum DevJunk {
         return out
     }
 
+    /// Biggest first, always — the whole point of the view is "what should I
+    /// delete first". Entries still being sized sink to the bottom.
+    static func bySize(_ items: [JunkDir]) -> [JunkDir] {
+        items.sorted {
+            if ($0.sizeBytes >= 0) != ($1.sizeBytes >= 0) { return $0.sizeBytes >= 0 }
+            return $0.sizeBytes > $1.sizeBytes
+        }
+    }
+
     /// Delete a junk folder — but re-verify the guard first, so this can never
     /// remove anything that isn't a provable build artifact.
     static func delete(_ url: URL) -> String? {

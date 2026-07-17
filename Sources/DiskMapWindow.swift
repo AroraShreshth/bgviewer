@@ -150,6 +150,9 @@ final class DevJunkModel: ObservableObject {
                             if let i = self.items.firstIndex(where: { $0.url.path == path }) {
                                 self.items[i].sizeBytes = size
                             }
+                            // Keep the list biggest-first the whole time sizes
+                            // stream in, not just at the end.
+                            self.items = DevJunk.bySize(self.items)
                         }
                     }
                     if let p = iterator.next() {
@@ -159,7 +162,7 @@ final class DevJunkModel: ObservableObject {
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.items.sort { max($0.sizeBytes, 0) > max($1.sizeBytes, 0) }
+                self.items = DevJunk.bySize(self.items)
                 self.scanning = false
             }
         }
