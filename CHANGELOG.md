@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.9.0 — 2026-07-18
+
+- **App caches in Dev Junk**: a new APP CACHES group finds the classic
+  disk-garbling caches — Adobe media cache / Camera Raw, Xcode iOS
+  DeviceSupport, CocoaPods, npm/Yarn/pip, Homebrew downloads, Playwright —
+  plus any non-Apple folder in ~/Library/Caches over 100 MB
+- Same guarded-delete rules: curated paths or direct ~/Library/Caches
+  children only, `com.apple.*` never listed or deletable, guard re-checked at
+  delete time, two-step confirm. Header notes: quit the app before clearing
+  its cache
+- Small caches are dropped from the list automatically once sized
+
 ## 1.8.0 — 2026-07-17
 
 - **Self-update**: the green update button now updates the app in place —

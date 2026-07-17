@@ -1,0 +1,13 @@
+# Cloudflare Workers config — serves the static site in ./site
+# Deploy:  npx wrangler deploy
+
+name = "bgviewer-site"
+compatibility_date = "2026-07-01"
+
+routes = [
+  { pattern = "bgviewer.shreshtharora.com", custom_domain = true }
+]
+
+[assets]
+directory = "./site"
+not_found_handling = "404-page"

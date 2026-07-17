@@ -112,9 +112,12 @@ final class DevJunkModel: ObservableObject {
     private var task: Task<Void, Never>?
     private var started = false
     let roots: [URL]
+    let cachesHome: URL?   // nil disables the caches section (tests/previews)
 
-    init(roots: [URL] = [FileManager.default.homeDirectoryForCurrentUser]) {
+    init(roots: [URL] = [FileManager.default.homeDirectoryForCurrentUser],
+         cachesHome: URL? = FileManager.default.homeDirectoryForCurrentUser) {
         self.roots = roots
+        self.cachesHome = cachesHome
     }
 
     var totalBytes: Int64 { items.reduce(0) { $0 + max(0, $1.sizeBytes) } }
@@ -131,8 +134,10 @@ final class DevJunkModel: ObservableObject {
         items = []
         lastError = nil
         let roots = roots
+        let cachesHome = cachesHome
         task = Task.detached(priority: .userInitiated) { [weak self] in
-            let found = DevJunk.discover(under: roots)
+            var found = DevJunk.discover(under: roots)
+            if let cachesHome { found += DevJunk.discoverCaches(home: cachesHome) }
             await MainActor.run { [weak self] in self?.items = found }
             let pending = found.map { $0.url.path }
             await withTaskGroup(of: (String, Int64)?.self) { group in
@@ -151,8 +156,8 @@ final class DevJunkModel: ObservableObject {
                                 self.items[i].sizeBytes = size
                             }
                             // Keep the list biggest-first the whole time sizes
-                            // stream in, not just at the end.
-                            self.items = DevJunk.bySize(self.items)
+                            // stream in, and drop caches too small to matter.
+                            self.items = DevJunk.bySize(DevJunk.filterSizedCaches(self.items))
                         }
                     }
                     if let p = iterator.next() {
@@ -162,7 +167,7 @@ final class DevJunkModel: ObservableObject {
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.items = DevJunk.bySize(self.items)
+                self.items = DevJunk.bySize(DevJunk.filterSizedCaches(self.items))
                 self.scanning = false
             }
         }
@@ -381,28 +386,53 @@ struct DevJunkList: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 60)
                     }
-                    ForEach(model.items) { item in
-                        JunkRow(item: item,
-                                confirming: confirmingId == item.id,
-                                onReveal: { NSWorkspace.shared.activateFileViewerSelecting([item.url]) },
-                                onDelete: {
-                            if confirmingId == item.id {
-                                confirmingId = nil
-                                model.delete(item)
-                            } else {
-                                confirmingId = item.id
-                                let id = item.id
-                                Task { @MainActor in
-                                    try? await Task.sleep(nanoseconds: 4_000_000_000)
-                                    if confirmingId == id { confirmingId = nil }
-                                }
-                            }
-                        })
-                        Divider().padding(.leading, 40)
+                    let builds = model.items.filter { $0.category == "build" }
+                    let caches = model.items.filter { $0.category == "cache" }
+                    if !builds.isEmpty {
+                        junkHeader("BUILD ARTIFACTS", note: "regenerate on the next install/build")
+                        ForEach(builds) { item in junkRow(item) }
+                    }
+                    if !caches.isEmpty {
+                        junkHeader("APP CACHES", note: "apps rebuild these — quit the app before clearing its cache")
+                        ForEach(caches) { item in junkRow(item) }
                     }
                 }
                 .padding(.vertical, 4)
             }
+        }
+    }
+
+    private func junkHeader(_ title: String, note: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+            Text(note)
+                .font(.system(size: 10)).foregroundStyle(.tertiary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10).padding(.bottom, 4)
+    }
+
+    private func junkRow(_ item: JunkDir) -> some View {
+        VStack(spacing: 0) {
+            JunkRow(item: item,
+                    confirming: confirmingId == item.id,
+                    onReveal: { NSWorkspace.shared.activateFileViewerSelecting([item.url]) },
+                    onDelete: {
+                if confirmingId == item.id {
+                    confirmingId = nil
+                    model.delete(item)
+                } else {
+                    confirmingId = item.id
+                    let id = item.id
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        if confirmingId == id { confirmingId = nil }
+                    }
+                }
+            })
+            Divider().padding(.leading, 40)
         }
     }
 }
@@ -415,7 +445,7 @@ struct JunkRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "shippingbox")
+            Image(systemName: item.category == "cache" ? "archivebox" : "shippingbox")
                 .font(.system(size: 13)).foregroundStyle(.orange)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {

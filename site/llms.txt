@@ -1,0 +1,42 @@
+# bgviewer
+
+> bgviewer is a free, open-source (MIT) menu-bar kill-switch for macOS background
+> services. Activity Monitor shows you the process; bgviewer shows why it keeps
+> coming back — and stops it at the launchd level, where resurrection is decided.
+> Universal binary (Apple Silicon + Intel), macOS 13+, ~700 KB, zero dependencies,
+> zero telemetry.
+
+What it does:
+
+- Sees six sources in one dropdown: user launch agents (~/Library/LaunchAgents),
+  machine-wide vendor agents (/Library/LaunchAgents), Homebrew services, every
+  process holding a TCP port, resource hogs (≥15% CPU or ≥1 GB RAM with no port),
+  and cron jobs (read-only).
+- Stop uses `launchctl bootout`, which defeats KeepAlive so services stay stopped;
+  stubborn processes get SIGTERM then SIGKILL, and every action is verified.
+- Disable parks the agent's plist (never deletes it) and blocks auto-start until
+  re-enabled with one click. Apple system processes are locked and untouchable.
+- Opt-in alerts the moment a new dev server starts listening, even when closed.
+- Storage tools: biggest forgotten files, a drill-down disk-map pie chart of any
+  folder, and Dev Junk — regenerable build folders (node_modules, Python venvs,
+  Rust target, CocoaPods, DerivedData) and app caches, deletable behind guard
+  checks and a two-step confirm. Personal files are never deletable.
+- Self-updates from GitHub Releases, verified against SHA-256 checksums and code
+  signature, with automatic rollback. The only network calls are the release
+  check (≤ every 6 h) and updates.
+
+Install:
+
+- One-liner: `curl -fsSL https://raw.githubusercontent.com/AroraShreshth/bgviewer/main/install.sh | bash`
+- Homebrew: `brew tap arorashreshth/bgviewer https://github.com/AroraShreshth/bgviewer && brew install --cask arorashreshth/bgviewer/bgviewer --no-quarantine`
+- Manual: download the zip from the releases page, drag to /Applications, then
+  `xattr -d com.apple.quarantine /Applications/bgviewer.app` (not notarized yet).
+
+Links:
+
+- [Website](https://bgviewer.shreshtharora.com)
+- [Source code](https://github.com/AroraShreshth/bgviewer): full Swift source, MIT
+- [Releases](https://github.com/AroraShreshth/bgviewer/releases): signed zips + SHA-256 checksums
+- [Issues](https://github.com/AroraShreshth/bgviewer/issues)
+
+Author: Shreshth Arora (https://github.com/AroraShreshth)

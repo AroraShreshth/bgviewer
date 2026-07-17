@@ -456,6 +456,50 @@ func testDevJunk() {
     check("bySize: still-sizing entries sink to bottom", sorted.last?.sizeBytes == -1)
 }
 
+func testAppCaches() {
+    print("\n• Unit — app caches (guarded discovery + delete)")
+    let fm = FileManager.default
+    let home = fm.temporaryDirectory.appendingPathComponent("bgviewer-cache-home-\(ProcessInfo.processInfo.processIdentifier)")
+    defer { try? fm.removeItem(at: home) }
+
+    func mk(_ rel: String) { try? fm.createDirectory(at: home.appendingPathComponent(rel), withIntermediateDirectories: true) }
+    mk("Library/Caches/FakeApp")
+    mk("Library/Caches/com.apple.Safari")
+    mk("Library/Application Support/Adobe/Common/Media Cache Files")
+    mk("Library/Caches/Homebrew")
+    mk("SomewhereElse/Cachey")
+
+    let found = DevJunk.discoverCaches(home: home)
+    let names = Set(found.map { $0.project })
+    check("caches: curated Adobe found + labeled", names.contains("Adobe media cache"))
+    check("caches: curated Homebrew found once (deduped)", found.filter { $0.url.lastPathComponent == "Homebrew" }.count == 1)
+    check("caches: generic non-Apple cache found", names.contains("FakeApp"))
+    check("caches: com.apple.* never listed", !found.contains { $0.url.lastPathComponent.contains("com.apple") })
+    check("caches: all categorized 'cache'", found.allSatisfy { $0.category == "cache" })
+
+    check("validatesCache: Adobe curated ok", DevJunk.validatesCache(home.appendingPathComponent("Library/Application Support/Adobe/Common/Media Cache Files"), home: home)?.label == "Adobe media cache")
+    check("validatesCache: generic Caches child ok", DevJunk.validatesCache(home.appendingPathComponent("Library/Caches/FakeApp"), home: home) != nil)
+    check("validatesCache: com.apple.* refused", DevJunk.validatesCache(home.appendingPathComponent("Library/Caches/com.apple.Safari"), home: home) == nil)
+    check("validatesCache: Caches root itself refused", DevJunk.validatesCache(home.appendingPathComponent("Library/Caches"), home: home) == nil)
+    check("validatesCache: outside Caches refused", DevJunk.validatesCache(home.appendingPathComponent("SomewhereElse/Cachey"), home: home) == nil)
+
+    // Delete honors the cache guard (and still refuses non-caches).
+    fm.createFile(atPath: home.appendingPathComponent("Library/Caches/FakeApp/blob").path, contents: Data(count: 500))
+    check("cache delete: allowed + gone", DevJunk.delete(home.appendingPathComponent("Library/Caches/FakeApp"), home: home) == nil
+          && !fm.fileExists(atPath: home.appendingPathComponent("Library/Caches/FakeApp").path))
+    check("cache delete: refuses arbitrary dir", DevJunk.delete(home.appendingPathComponent("SomewhereElse/Cachey"), home: home) != nil
+          && fm.fileExists(atPath: home.appendingPathComponent("SomewhereElse/Cachey").path))
+
+    // Threshold filter: small sized caches drop, unsized + builds stay.
+    func cj(_ n: String, _ s: Int64, cat: String = "cache") -> JunkDir {
+        JunkDir(url: URL(fileURLWithPath: "/\(n)"), kind: "k", regenerate: "r", project: n, sizeBytes: s, category: cat)
+    }
+    let filtered = DevJunk.filterSizedCaches([cj("big", 900_000_000), cj("tiny", 5_000_000), cj("pending", -1), cj("smallbuild", 5_000_000, cat: "build")])
+    check("cache filter: small cache dropped", !filtered.contains { $0.project == "tiny" })
+    check("cache filter: big + pending caches stay", filtered.contains { $0.project == "big" } && filtered.contains { $0.project == "pending" })
+    check("cache filter: build artifacts never dropped", filtered.contains { $0.project == "smallbuild" })
+}
+
 // ───────────────────────── Unit: self-updater ─────────────────────────
 
 func testUpdater() {
@@ -670,6 +714,7 @@ testTrashEligibility()
 testDiskScanner()
 testDiskMap()
 testDevJunk()
+testAppCaches()
 testUpdater()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
