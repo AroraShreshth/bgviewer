@@ -20,6 +20,7 @@ for ARCH in arm64 x86_64; do
 		Sources/Models.swift \
 		Sources/ServiceScanner.swift \
 		Sources/ServiceControl.swift \
+		Sources/DiskScanner.swift \
 		Sources/ServiceStore.swift \
 		Sources/Views.swift \
 		Sources/BgviewerApp.swift \

@@ -22,12 +22,14 @@ struct RootView: View {
     @State private var isOpen = false
     @State private var showInfo: Bool
     @State private var showSettings: Bool
+    @State private var showDisk: Bool
 
     private let ticker = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
 
-    init(showInfoInitially: Bool = false, showSettingsInitially: Bool = false) {
+    init(showInfoInitially: Bool = false, showSettingsInitially: Bool = false, showDiskInitially: Bool = false) {
         _showInfo = State(initialValue: showInfoInitially)
         _showSettings = State(initialValue: showSettingsInitially)
+        _showDisk = State(initialValue: showDiskInitially)
     }
 
     var body: some View {
@@ -58,6 +60,16 @@ struct RootView: View {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         showInfo.toggle()
                         showSettings = false
+                        showDisk = false
+                    }
+                }
+                IconButton(system: showDisk ? "internaldrive.fill" : "internaldrive",
+                           color: showDisk ? .cyan : .gray,
+                           help: "Storage — big files hogging disk space") {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        showDisk.toggle()
+                        showInfo = false
+                        showSettings = false
                     }
                 }
                 Image(systemName: "gauge.with.dots.needle.bottom.50percent")
@@ -83,6 +95,7 @@ struct RootView: View {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         showSettings.toggle()
                         showInfo = false
+                        showDisk = false
                     }
                 }
                 IconButton(system: "power", color: .red, help: "Quit bgviewer") { NSApp.terminate(nil) }
@@ -114,6 +127,8 @@ struct RootView: View {
             InfoPanel()
         } else if showSettings {
             SettingsPanel()
+        } else if showDisk {
+            DiskPanel()
         } else {
             listContent
         }
@@ -210,6 +225,142 @@ struct RootView: View {
             return "v\(v) · updated \(store.lastUpdated)"
         }
         return "updated \(store.lastUpdated)"
+    }
+}
+
+// MARK: - Storage panel
+
+struct DiskPanel: View {
+    @EnvironmentObject var store: ServiceStore
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Large files").font(.system(size: 13, weight: .semibold))
+                    Text("over 100 MB in Downloads · Desktop · Documents · Movies")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                capacity
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if store.bigFiles.isEmpty {
+                        emptyState
+                    } else {
+                        ForEach(store.bigFiles) { f in
+                            BigFileRow(f: f)
+                            Divider().padding(.leading, 40)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(height: 352)
+            Divider()
+
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("bgviewer never deletes files — it only reveals them in Finder. Deleting stays your call.")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+        }
+        .onAppear { store.refreshDisk() }
+    }
+
+    /// The free-space bar, top-right of the pane.
+    private var capacity: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text(store.diskTotal > 0
+                 ? "\(DiskScanner.humanSize(store.diskFree)) free of \(DiskScanner.humanSize(store.diskTotal))"
+                 : "measuring…")
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.2))
+                Capsule().fill(barColor)
+                    .frame(width: 130 * usedFraction)
+            }
+            .frame(width: 130, height: 6)
+        }
+        .help("Free space on your startup disk (counts purgeable space, like Finder)")
+    }
+
+    private var usedFraction: CGFloat {
+        guard store.diskTotal > 0 else { return 0 }
+        return CGFloat(store.diskTotal - store.diskFree) / CGFloat(store.diskTotal)
+    }
+
+    private var barColor: Color {
+        usedFraction > 0.9 ? .red : usedFraction > 0.75 ? .orange : .green
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            if store.diskScanning {
+                ProgressView().controlSize(.small)
+                Text("Scanning…").font(.system(size: 12)).foregroundStyle(.secondary)
+            } else {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 26)).foregroundStyle(.secondary)
+                Text("Nothing over 100 MB lying around — tidy!")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+    }
+
+    struct BigFileRow: View {
+        let f: BigFile
+
+        var body: some View {
+            HStack(spacing: 10) {
+                Image(systemName: DiskScanner.icon(for: f.name))
+                    .font(.system(size: 13))
+                    .foregroundStyle(.cyan)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(f.name).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                    Text(subtitle).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(DiskScanner.humanSize(f.sizeBytes))
+                    .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                IconButton(system: "folder", color: .blue, help: "Reveal in Finder") { reveal() }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .contentShape(Rectangle())
+            .onTapGesture { reveal() }
+            .help(f.path)
+        }
+
+        private var subtitle: String {
+            var parts = [DiskScanner.shortFolder(f.path)]
+            if let m = f.modified {
+                parts.append(DiskPanel.relative.localizedString(for: m, relativeTo: Date()))
+            }
+            return parts.joined(separator: " · ")
+        }
+
+        private func reveal() {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: f.path)])
+        }
     }
 }
 
@@ -343,6 +494,8 @@ struct InfoPanel: View {
                         text: "The list re-scans every few seconds while open.")
                 InfoRow(icon: "bell.badge", color: .secondaryInfo, title: "Alerts",
                         text: "Turn on alerts in Settings (the ⚙ up top) to get a notification whenever a new dev server starts listening — even while this window is closed.")
+                InfoRow(icon: "internaldrive", color: .secondaryInfo, title: "Storage pane",
+                        text: "The drive button lists the biggest files sitting in Downloads, Desktop, Documents and Movies, plus how much disk you have left. It only reveals files in Finder — deleting is always your call.")
 
                 HStack(spacing: 8) {
                     Chip(label: "GitHub — docs & issues", system: "arrow.up.right.square") {

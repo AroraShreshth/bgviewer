@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.0 — 2026-07-14
+
+- **Storage pane** (💾 drive button in the header): the biggest files sitting in
+  Downloads, Desktop, Documents and Movies (over 100 MB), with size, location,
+  and how long ago you touched them — plus a free-space bar for your startup
+  disk in the pane's top-right corner
+- Deliberately **no delete button**: rows only reveal in Finder; removing
+  files stays a human decision
+- Suggested by a user — thank you!
+
 ## 1.4.0 — 2026-07-14
 
 - Settings panel (⚙ in the header): Alerts and Start-at-login moved out of the

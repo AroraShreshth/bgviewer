@@ -301,6 +301,55 @@ func testTrashEligibility() {
     check("running agent cannot be trashed", !active.canTrash)
 }
 
+// ───────────────────────── Unit: storage pane ─────────────────────────
+
+func testDiskScanner() {
+    print("\n• Unit — storage pane (big files)")
+    let fm = FileManager.default
+    let tmp = fm.temporaryDirectory.appendingPathComponent("bgviewer-disk-test-\(ProcessInfo.processInfo.processIdentifier)")
+    let sub = tmp.appendingPathComponent("nested")
+    try? fm.createDirectory(at: sub, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tmp) }
+
+    // Sizes are tiny; the threshold is injected so the test stays fast.
+    fm.createFile(atPath: tmp.appendingPathComponent("big.dmg").path, contents: Data(count: 3000))
+    fm.createFile(atPath: tmp.appendingPathComponent("small.txt").path, contents: Data(count: 500))
+    fm.createFile(atPath: sub.appendingPathComponent("huge.mp4").path, contents: Data(count: 5000))
+    fm.createFile(atPath: tmp.appendingPathComponent(".hidden.zip").path, contents: Data(count: 9000))
+
+    let found = DiskScanner.scanBigFiles(in: [tmp], minBytes: 1000, limit: 10)
+    check("finds files over threshold, recursing", found.count == 2)
+    check("sorted biggest first", found.first?.name == "huge.mp4" && found.first?.sizeBytes == 5000)
+    check("below-threshold file skipped", !found.contains { $0.name == "small.txt" })
+    check("hidden files skipped", !found.contains { $0.name.contains("hidden") })
+
+    let capped = DiskScanner.scanBigFiles(in: [tmp], minBytes: 1000, limit: 1)
+    check("limit respected", capped.count == 1 && capped.first?.name == "huge.mp4")
+
+    check("missing dir -> empty, no crash", DiskScanner.scanBigFiles(in: [tmp.appendingPathComponent("nope")], minBytes: 1).isEmpty)
+
+    let t = DiskScanner.top([
+        BigFile(path: "/a", sizeBytes: 10, modified: nil),
+        BigFile(path: "/b", sizeBytes: 30, modified: nil),
+        BigFile(path: "/c", sizeBytes: 20, modified: nil),
+    ], limit: 2)
+    check("top(): sorts desc and caps", t.map { $0.path } == ["/b", "/c"])
+
+    if let space = DiskScanner.diskSpace() {
+        check("diskSpace(): sane values", space.free > 0 && space.total >= space.free)
+    } else {
+        check("diskSpace(): returned nil on a real volume", false)
+    }
+
+    check("humanSize formats", DiskScanner.humanSize(5 * 1024 * 1024).contains("MB"))
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    check("shortFolder abbreviates home", DiskScanner.shortFolder("\(home)/Downloads/big.dmg") == "~/Downloads")
+    check("icon: dmg", DiskScanner.icon(for: "x.dmg") == "opticaldiscdrive")
+    check("icon: video", DiskScanner.icon(for: "movie.MKV") == "film")
+    check("icon: model weights", DiskScanner.icon(for: "llama.gguf") == "cpu")
+    check("icon: fallback", DiskScanner.icon(for: "weird.xyz") == "doc")
+}
+
 // ─────────────── Integration: STOP really stops ───────────────
 
 func testProcessStop() {
@@ -477,6 +526,7 @@ testCron()
 testVersionCompare()
 testListenerDiff()
 testTrashEligibility()
+testDiskScanner()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
 } else {

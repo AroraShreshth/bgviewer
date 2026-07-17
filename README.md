@@ -42,6 +42,8 @@ Agents that can resurrect themselves are marked **↻ auto-restart**, so you kno
 
 Every action is verified after it runs; if something fails, the reason shows up in the footer. Nothing fails silently.
 
+There's also a **💾 Storage pane** (drive button in the header): the biggest files quietly sitting in Downloads, Desktop, Documents and Movies — size, location, how long you've ignored them — with a free-disk-space bar in the corner. It deliberately has **no delete button**: rows only *reveal in Finder*, because deleting is a decision bgviewer refuses to make for you.
+
 Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command) and the list **auto-refreshes every few seconds while open**. The **⚙ Settings panel** holds **Alerts** (a notification the moment a new dev server starts listening, even while the dropdown is closed), **start at login**, and an update check — one GitHub call at most every 6 hours is the app's only network access. A green **update button** appears in the header when a newer release exists. All of this is also explained in-app — the **ⓘ** button top-left.
 
 ## How Disable works (and why it's safe)

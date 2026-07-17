@@ -9,6 +9,7 @@ swiftc -O -swift-version 5 \
 	Sources/Models.swift \
 	Sources/ServiceScanner.swift \
 	Sources/ServiceControl.swift \
+	Sources/DiskScanner.swift \
 	Tests/main.swift \
 	-o "$BIN"
 

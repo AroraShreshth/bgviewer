@@ -11,6 +11,10 @@ final class ServiceStore: ObservableObject {
     @Published var alertsEnabled = false    // notify when a new dev server starts listening
     @Published var updateAvailable: String? // newer release tag, when one exists
     @Published var updateStatus: String?    // result line for manual update checks
+    @Published var bigFiles: [BigFile] = [] // storage pane contents
+    @Published var diskFree: Int64 = 0
+    @Published var diskTotal: Int64 = 0
+    @Published var diskScanning = false
 
     private var watchTask: Task<Void, Never>?
 
@@ -63,6 +67,23 @@ final class ServiceStore: ObservableObject {
                 self.isLoading = false
                 self.lastUpdated = Self.timeString()
                 self.statusMessage = err
+            }
+        }
+    }
+
+    /// Refreshes the storage pane: big-file scan + volume capacity.
+    func refreshDisk() {
+        diskScanning = true
+        Task.detached(priority: .userInitiated) {
+            let files = DiskScanner.scanBigFiles()
+            let space = DiskScanner.diskSpace()
+            await MainActor.run {
+                self.bigFiles = files
+                if let space {
+                    self.diskFree = space.free
+                    self.diskTotal = space.total
+                }
+                self.diskScanning = false
             }
         }
     }
