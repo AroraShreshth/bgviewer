@@ -82,10 +82,9 @@ struct RootView: View {
                 Spacer()
                 if store.isLoading { ProgressView().controlSize(.small).scaleEffect(0.8) }
                 if let v = store.updateAvailable {
-                    IconButton(system: "arrow.down.circle.fill", color: .green, help: "bgviewer \(v) is available — open Releases") {
-                        if let url = URL(string: "https://github.com/AroraShreshth/bgviewer/releases/latest") {
-                            NSWorkspace.shared.open(url)
-                        }
+                    IconButton(system: "arrow.down.circle.fill", color: .green,
+                               help: store.updating ? "Updating…" : "Update to bgviewer \(v) now") {
+                        store.updateNow()
                     }
                 }
                 IconButton(system: "arrow.clockwise", color: .blue, help: "Rescan") { store.refresh() }
@@ -399,16 +398,18 @@ struct SettingsPanel: View {
                     isOn: Binding(get: { loginEnabled }, set: { setLogin($0) }))
 
                 sectionTitle("Updates")
+                SettingRow(
+                    title: "Install updates automatically",
+                    caption: "When a new release appears on GitHub, bgviewer downloads it, verifies the SHA-256 against the release's checksums and the code signature, swaps itself in place, and relaunches. Off: the green button appears and you update when you choose.",
+                    isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         Chip(label: "Check for updates", system: "arrow.triangle.2.circlepath") {
                             store.checkForUpdate(force: true)
                         }
-                        if let v = store.updateAvailable {
-                            Chip(label: "Get v\(v)", system: "arrow.down.circle") {
-                                if let url = URL(string: "https://github.com/AroraShreshth/bgviewer/releases/latest") {
-                                    NSWorkspace.shared.open(url)
-                                }
+                        if let v = store.updateAvailable, !store.updating {
+                            Chip(label: "Update to v\(v)", system: "arrow.down.circle") {
+                                store.updateNow()
                             }
                         }
                         Spacer()
@@ -416,7 +417,7 @@ struct SettingsPanel: View {
                             Text(status).font(.system(size: 10.5)).foregroundStyle(.secondary)
                         }
                     }
-                    Text("bgviewer checks GitHub for new releases at most once every 6 hours — its only network call. No telemetry, ever.")
+                    Text("Release checks hit GitHub at most once every 6 hours; updates download only from this project's GitHub Releases. No telemetry, ever.")
                         .font(.system(size: 10.5)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

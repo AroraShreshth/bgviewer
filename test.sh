@@ -12,6 +12,7 @@ swiftc -O -swift-version 5 \
 	Sources/DiskScanner.swift \
 	Sources/DiskMap.swift \
 	Sources/DevJunk.swift \
+	Sources/Updater.swift \
 	Tests/main.swift \
 	-o "$BIN"
 

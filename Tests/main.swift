@@ -456,6 +456,41 @@ func testDevJunk() {
     check("bySize: still-sizing entries sink to bottom", sorted.last?.sizeBytes == -1)
 }
 
+// ───────────────────────── Unit: self-updater ─────────────────────────
+
+func testUpdater() {
+    print("\n• Unit — self-updater (parse, checksum, path guard)")
+
+    let fixture = """
+    {"tag_name":"v9.9.9","assets":[
+      {"name":"checksums.txt","browser_download_url":"https://example.com/checksums.txt"},
+      {"name":"bgviewer-9.9.9.zip","browser_download_url":"https://example.com/bgviewer-9.9.9.zip"}
+    ]}
+    """.data(using: .utf8)!
+    let info = Updater.parseRelease(fixture)
+    check("release parse: version stripped of v", info?.version == "9.9.9")
+    check("release parse: zip asset found", info?.zipURL.lastPathComponent == "bgviewer-9.9.9.zip")
+    check("release parse: checksums asset found", info?.checksumsURL?.lastPathComponent == "checksums.txt")
+    check("release parse: no zip asset -> nil", Updater.parseRelease("{\"tag_name\":\"v1.0\",\"assets\":[]}".data(using: .utf8)!) == nil)
+    check("release parse: garbage -> nil", Updater.parseRelease(Data("nope".utf8)) == nil)
+
+    check("sha256 known vector", Updater.sha256Hex(Data("abc".utf8)) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+
+    let zip = Data("pretend zip".utf8)
+    let good = "\(Updater.sha256Hex(zip))  bgviewer-9.9.9.zip\nother  something-else.zip"
+    check("checksum verify: match", Updater.verifyChecksum(zipData: zip, checksums: good, assetName: "bgviewer-9.9.9.zip"))
+    check("checksum verify: wrong hash rejected", !Updater.verifyChecksum(zipData: Data("tampered".utf8), checksums: good, assetName: "bgviewer-9.9.9.zip"))
+    check("checksum verify: asset missing from file rejected", !Updater.verifyChecksum(zipData: zip, checksums: good, assetName: "not-listed.zip"))
+
+    let home = NSHomeDirectory()
+    check("path guard: /Applications ok", Updater.isUpdatableInstallPath("/Applications/bgviewer.app"))
+    check("path guard: ~/Applications ok", Updater.isUpdatableInstallPath("\(home)/Applications/bgviewer.app"))
+    check("path guard: nested under /Applications ok", Updater.isUpdatableInstallPath("/Applications/UpdateTest/bgviewer.app"))
+    check("path guard: dev checkout refused", !Updater.isUpdatableInstallPath("\(home)/bgviewer/bgviewer.app"))
+    check("path guard: other app name refused", !Updater.isUpdatableInstallPath("/Applications/Notbgviewer.app"))
+    check("path guard: tmp refused", !Updater.isUpdatableInstallPath("/tmp/bgviewer.app"))
+}
+
 // ─────────────── Integration: STOP really stops ───────────────
 
 func testProcessStop() {
@@ -635,6 +670,7 @@ testTrashEligibility()
 testDiskScanner()
 testDiskMap()
 testDevJunk()
+testUpdater()
 if unitOnly {
     print("\n(skipping integration tests — run ./test.sh without --unit locally)")
 } else {

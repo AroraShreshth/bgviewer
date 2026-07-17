@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.0 — 2026-07-17
+
+- **Self-update**: the green update button now updates the app in place —
+  downloads the release zip, verifies its SHA-256 against the release's
+  checksums.txt and its code signature, swaps the bundle (with automatic
+  rollback on failure), and relaunches
+- **Auto-update toggle** in Settings: when on, new releases install
+  themselves as soon as the periodic check finds one
+- Self-update only ever touches a real install (/Applications or
+  ~/Applications) — dev checkouts fall back to the Releases page
+- Updates download exclusively from this project's GitHub Releases; still no
+  telemetry
+
 ## 1.7.1 — 2026-07-17
 
 - Dev Junk stays sorted **biggest-first live** while sizes stream in — the
