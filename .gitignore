@@ -7,6 +7,9 @@ dist/
 # Local working notes — intentionally untracked
 PUBLISH_CHECKLIST.md
 
+# Personal-data screenshot — must never be committed (shows real folder contents)
+docs/diskmap.png
+
 # macOS
 .DS_Store
 

@@ -44,8 +44,6 @@ Every action is verified after it runs; if something fails, the reason shows up 
 
 There's also a **💾 Storage pane** (drive button in the header): the biggest files quietly sitting in Downloads, Desktop, Documents and Movies — size, location, how long you've ignored them — with a free-disk-space bar in the corner. From there, open the **Disk Map**: a full window with a clickable pie of what's eating your disk — drill into folders wedge by wedge, scan any folder you pick. Everything deliberately has **no delete button**: rows only *reveal in Finder*, because deleting is a decision bgviewer refuses to make for you.
 
-<p align="center"><img src="docs/diskmap.png" width="640" alt="Disk Map — clickable pie chart of folder sizes with drill-down"></p>
-
 Beyond the buttons: **click a row** for details — the full command line, *Copy command*, *Reveal plist*, *View log*, and for dev servers a one-click *open localhost:port*. There's a **search box** (name, port, or command) and the list **auto-refreshes every few seconds while open**. The **⚙ Settings panel** holds **Alerts** (a notification the moment a new dev server starts listening, even while the dropdown is closed), **start at login**, and an update check — one GitHub call at most every 6 hours is the app's only network access. A green **update button** appears in the header when a newer release exists. All of this is also explained in-app — the **ⓘ** button top-left.
 
 ## How Disable works (and why it's safe)
